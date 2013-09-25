@@ -9,6 +9,8 @@
 (defn now []
   (.valueOf (js/Date.)))
 
+(defn log [s] (.log js/console s))
+
 (defn put-all! [cs x]
   (doseq [c cs]
     (put! c x)))
@@ -177,4 +179,14 @@
           (let [ts (<! source)]
             (>! c (- ts start))
             (recur ts)))))
+    c))
+
+(defn dropping-chan [source n]
+  (let [c (chan)]
+    (go
+      (loop [count 0]
+        (if (= count 0)
+          (>! c (<! source))
+          (<! source))
+        (recur (rem (inc count) n))))
     c))

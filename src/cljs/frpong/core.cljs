@@ -1,5 +1,5 @@
 (ns frpong.core
-  (:require [frpong.helpers :as h]
+  (:require [frpong.helpers :as h :refer [log]]
             [cljs.core.async :as async
              :refer [<! >! chan put! close! sliding-buffer dropping-buffer timeout]]
             [domina :as dom :refer [log]]
@@ -31,6 +31,16 @@
 ;;                                                 +----------+
 
 (defn abs [x] (.abs js/Math x))
+
+(defn tick-chan [frame-chan]
+  (let [c (chan)]
+    (go
+      (loop [prev (<! frame-chan)]
+        (let [t (<! frame-chan)]
+          (when (< t (* 10 prev))
+            (>! c t))
+            (recur t))))
+    c))
 
 (defn positioner [tick-chan vel-chan pos-chan-in pos-chan-out]
   (go-loop
@@ -65,7 +75,7 @@
       (dom/set-attr! (dom/by-id "ball") "cy" y))))
 
 (defn game-setup [width height padding frame-chan pos-chan vel-chan]
-  (let [[tick-chan-pos tick-chan-collsion] (h/dup-chan (h/diff-chan frame-chan))
+  (let [[tick-chan-pos tick-chan-collsion] (h/dup-chan (tick-chan (h/diff-chan frame-chan)))
         [pos-chan-pos pos-chan-render pos-chan-collision] (h/multiplex pos-chan 3)
         [vel-chan-pos vel-chan-collision vel-chan-render] (h/multiplex vel-chan 3)]
     (positioner tick-chan-pos vel-chan-pos pos-chan-pos pos-chan)
@@ -85,14 +95,17 @@
 
 (defn ^:export init []
   (let [frame-chan (h/frame-chan)
-        [frame-chan-fps frame-chan-game] (h/dup-chan frame-chan)
+        [frame-chan-fps frame-chan-game frame-chan-count] (h/multiplex frame-chan 3)
 
         fps-chan (h/map-chan #(/ 1000 %) (h/diff-chan frame-chan-fps))
+        frame-count-chan (h/counting-chan frame-chan-count)
 
-        width 300
-        height 200
+        width 600
+        height 400
         padding 5
         init-pos [5 100]
         init-vel [0.2 0.22]]
-    (go-loop (dom/set-text! (dom/by-id "fps") (<! fps-chan)))
+    (go-loop
+      (dom/set-text! (dom/by-id "fps") (<! fps-chan))
+      (dom/set-text! (dom/by-id "frame") (<! frame-count-chan)))
     (game-init width height padding init-pos init-vel frame-chan-game)))
