@@ -1,6 +1,6 @@
 (ns frpong.core)
 
-(defn foo
-  "I don't do a whole lot."
-  [x]
-  (println x "Hello, World!"))
+(defmacro go-loop [& body]
+  `(cljs.core.async.macros/go
+     (while true
+       ~@body)))

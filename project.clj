@@ -7,7 +7,7 @@
   :source-paths ["src/clj"]
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [domina "1.0.2-SNAPSHOT"]
-                 [org.clojure/clojurescript "0.0-1878"]
+                 [org.clojure/clojurescript "0.0-1844"]
                  [org.clojure/core.async "0.1.222.0-83d0c2-alpha"]]
 
   :plugins [[lein-cljsbuild "0.3.3"]]
