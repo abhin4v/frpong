@@ -10,7 +10,10 @@
 <body>
 	<div>FPS: <span id="fps"></span></div>
 	<div>Position: <span id="pos"></span></div>
-	<div style="position: absolute" id="ball">O</div>
+	<svg style="width: 300px; height: 200px; border: 1px black solid" id="canvas">
+		<circle id="ball" r="5" cx="5" cy="100"/>
+	</svg>
+	
     <!-- pointing to cljsbuild generated js file -->
     <script src="js/frpong.js"></script>
     <script type="text/javascript">frpong.core.init()</script>
