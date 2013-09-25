@@ -50,7 +50,7 @@
           pos-next [(+ x (* vel-x tick)) (+ y (* vel-y tick))]]
       (>! pos-chan-out pos-next))))
 
-(defn collision-detector [width height padding tick-chan pos-chan vel-chan-in vel-chan-out]
+(defn collision-detector [{:keys [width height padding]} tick-chan pos-chan vel-chan-in vel-chan-out]
   (go-loop
     (let [adjust-v (fn [p v size]
                       (cond
@@ -65,17 +65,8 @@
           vel-yn (adjust-v yn vel-y height)]
       (>! vel-chan-out [vel-xn vel-yn]))))
 
-(defn key-chan [keycodes]
-  (let [source (h/event-chan :keydown)
-        c (chan)]
-    (go-loop
-      (let [kc (:keyCode (<! source))]
-        (when (contains? keycodes kc)
-          (>! c (keycodes kc)))))
-    c))
-
 (defn paddle-positioner [keycodes max-y movement pos-chan-in pos-chan-out]
-  (let [key-chan (key-chan keycodes)]
+  (let [key-chan (h/key-chan keycodes)]
     (go-loop
       (let [dir (<! key-chan)
             pos (<! pos-chan-in)]
@@ -96,17 +87,16 @@
   (go-loop
     (dom/set-attr! (dom/by-id "rpaddle") "y" (<! pr-pos-chan))))
 
-(defn game-setup [{:keys [width height padding paddle-size]} paddle-movement
+(defn game-setup [{:keys [width height padding paddle-size] :as layout} paddle-movement
                   frame-chan pos-chan vel-chan pl-pos-chan pr-pos-chan]
   (let [max-y (- height paddle-size)
         [tick-chan-pos tick-chan-collsion] (h/dup-chan (tick-chan (h/diff-chan frame-chan)))
         [pos-chan-pos pos-chan-collision pos-chan-render] (h/multiplex pos-chan 3)
         [vel-chan-pos vel-chan-collision vel-chan-render] (h/multiplex vel-chan 3)
-        [pl-pos-chan-pos pl-pos-chan-render] (h/multiplex pl-pos-chan 2)
-        [pr-pos-chan-pos pr-pos-chan-render] (h/multiplex pr-pos-chan 2)]
+        [pl-pos-chan-pos pl-pos-chan-render] (h/dup-chan pl-pos-chan)
+        [pr-pos-chan-pos pr-pos-chan-render] (h/dup-chan pr-pos-chan)]
     (ball-positioner tick-chan-pos vel-chan-pos pos-chan-pos pos-chan)
-    (collision-detector width height padding
-      tick-chan-collsion pos-chan-collision vel-chan-collision vel-chan)
+    (collision-detector layout tick-chan-collsion pos-chan-collision vel-chan-collision vel-chan)
     (paddle-positioner {83 :down 87 :up} max-y paddle-movement pl-pos-chan-pos pl-pos-chan)
     (paddle-positioner {38 :up 40 :down} max-y paddle-movement pr-pos-chan-pos pr-pos-chan)
     [pos-chan-render vel-chan-render pl-pos-chan-render pr-pos-chan-render]))
@@ -127,7 +117,7 @@
 
 (defn ^:export init []
   (let [frame-chan (h/frame-chan)
-        [frame-chan-fps frame-chan-game frame-chan-count] (h/multiplex frame-chan 3)
+        [frame-chan-fps frame-chan-count frame-chan-game] (h/multiplex frame-chan 3)
 
         fps-chan (h/map-chan #(/ 1000 %) (h/diff-chan frame-chan-fps))
         frame-count-chan (h/counting-chan frame-chan-count)

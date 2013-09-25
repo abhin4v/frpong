@@ -151,6 +151,15 @@
     (ev/listen! event-type #(put! c %))
     c))
 
+(defn key-chan [keycodes]
+  (let [source (event-chan :keydown)
+        c (chan)]
+    (go-loop
+      (let [kc (:keyCode (<! source))]
+        (when (contains? keycodes kc)
+          (>! c (keycodes kc)))))
+    c))
+
 (defn frame-chan []
   (let [c (chan (sliding-buffer 1000))
         step (fn step [ts]  (do (put! c ts) (.requestAnimationFrame js/window step)))]
