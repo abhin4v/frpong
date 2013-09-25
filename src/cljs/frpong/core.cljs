@@ -6,6 +6,29 @@
             [domina.events :as ev])
   (:require-macros [cljs.core.async.macros :as m :refer [go]]
                    [frpong.core :refer (go-loop)]))
+;;
+;;                                Signal Diagram
+;;
+;;                                                        +---------------------+
+;;                                                        |   +-------------+   |
+;;                                                        |   |             |   |
+;;                                                        v   v             |   |
+;;                                                    +----------+ vel-chan |   |
+;;                                                +-->|c-detector+----------+   |
+;;                                                |   +----------+          |   |
+;;                                                |       +-----------------+   |
+;;                                                |       |   +-----------------+
+;;                                                |       |   |                 |
+;;                                                |       v   v                 |
+;;     +---------+ frame-chan  +------+ tick-chan |   +----------+   pos-chan   |
+;;     |frame-gen+------------>|ticker+-----------+-->|positioner+--------------+
+;;     +---------+             +------+               +----------+              |
+;;                                                        +---------------------+
+;;                                                        |
+;;                                                        v
+;;                                                    +----------+
+;;                                                    | renderer |
+;;                                                    +----------+
 
 (defn positioner [tick-chan vel-chan pos-chan-in pos-chan-out]
   (go-loop
