@@ -13,7 +13,9 @@
     <div>Position: <span id="pos"></span></div>
     <div>Velocity: <span id="vel"></span></div>
     <svg style="width: 600px; height: 400px; border: 1px black solid" id="canvas">
-        <circle id="ball" r="5" cx="5" cy="100"/>
+        <circle id="ball" r="5" cx="5" cy="100" />
+        <rect id="lpaddle" x="0" y="160" width="10" height="80" />
+        <rect id="rpaddle" x="590" y="160" width="10" height="80" />
     </svg>
     
     <!-- pointing to cljsbuild generated js file -->

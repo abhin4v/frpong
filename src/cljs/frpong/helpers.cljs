@@ -9,8 +9,6 @@
 (defn now []
   (.valueOf (js/Date.)))
 
-(defn log [s] (.log js/console s))
-
 (defn put-all! [cs x]
   (doseq [c cs]
     (put! c x)))
@@ -81,20 +79,17 @@
     (throttle (chan) source control))
   ([c source control]
     (go
-      (loop [state ::init last nil cs [source]]
-        (let [[_ sync] cs]
-          (let [[v sc] (alts! cs)]
-            (condp = sc
-              source (condp = state
-                       ::init (do (>! c v)
-                                (recur ::throttling last
-                                  (conj cs control)))
-                       ::throttling (recur state v cs))
-              sync (if last 
-                     (do (>! c last)
-                       (recur state nil
-                         (conj (pop cs) control)))
-                     (recur ::init last (pop cs))))))))
+      (loop [state ::init last nil]
+        (let [[v sc] (alts! [source control])]
+          (condp = sc
+            source (condp = state
+                     ::init (do (>! c v)
+                              (recur ::throttling last))
+                     ::throttling (recur state v))
+            control (if last 
+                      (do (>! c last)
+                       (recur state nil))
+                     (recur ::init last))))))
     c))
 
 (defn debounce
@@ -153,7 +148,7 @@
 
 (defn event-chan [event-type]
   (let [c (chan)]
-    (ev/listen! js/document event-type #(put! c %))
+    (ev/listen! event-type #(put! c %))
     c))
 
 (defn frame-chan []
