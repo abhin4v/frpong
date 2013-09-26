@@ -50,7 +50,8 @@
           pos-next [(+ x (* vel-x tick)) (+ y (* vel-y tick))]]
       (>! pos-chan-out pos-next))))
 
-(defn collision-detector [{:keys [width height padding]} tick-chan pos-chan vel-chan-in vel-chan-out]
+(defn collision-detector 
+  [{:keys [width height padding]} tick-chan pos-chan vel-chan-in vel-chan-out]
   (go-loop
     (let [adjust-v (fn [p v size]
                       (cond
@@ -74,14 +75,15 @@
           :up (>! pos-chan-out (max (- pos movement) 0))
           :down (>! pos-chan-out (min (+ pos movement) max-y)))))))
 
-(defn render-loop [[pos-chan vel-chan pl-pos-chan pr-pos-chan]]
+(defn renderer [pos-chan vel-chan pl-pos-chan pr-pos-chan]
   (go-loop
     (let [[x y] (map int (<! pos-chan))
           vel (<! vel-chan)]
       (dom/set-text! (dom/by-id "pos") [x y])
       (dom/set-text! (dom/by-id "vel") vel)
-      (dom/set-attr! (dom/by-id "ball") "cx" x)
-      (dom/set-attr! (dom/by-id "ball") "cy" y)))
+      (doto (dom/by-id "ball")
+        (dom/set-attr! "cx" x)
+        (dom/set-attr! "cy" y))))
   (go-loop
     (dom/set-attr! (dom/by-id "lpaddle") "y" (<! pl-pos-chan)))
   (go-loop
@@ -101,19 +103,20 @@
     (paddle-positioner {38 :up 40 :down} max-y paddle-movement pr-pos-chan-pos pr-pos-chan)
     [pos-chan-render vel-chan-render pl-pos-chan-render pr-pos-chan-render]))
 
-(defn game-init [layout {:keys [init-pos init-vel paddle-movement]} frame-chan]
-  (let [pos-chan (chan 1)
+(defn game-init [{:keys [height paddle-size] :as layout}
+                 {:keys [init-pos init-vel paddle-movement]} frame-chan]
+  (let [paddle-x (/ (- height paddle-size) 2)
+        pos-chan (chan 1)
         vel-chan (chan 1)
         pl-pos-chan (chan 1)
         pr-pos-chan (chan 1)]
     (put! pos-chan init-pos)
     (put! vel-chan init-vel)
-    (put! pl-pos-chan 160)
-    (put! pr-pos-chan 160)
+    (put! pl-pos-chan paddle-x)
+    (put! pr-pos-chan paddle-x)
 
-    (render-loop
-      (game-setup layout paddle-movement
-                  frame-chan pos-chan vel-chan pl-pos-chan pr-pos-chan))))
+    (apply renderer
+      (game-setup layout paddle-movement frame-chan pos-chan vel-chan pl-pos-chan pr-pos-chan))))
 
 (defn ^:export init []
   (let [frame-chan (h/frame-chan)
@@ -123,12 +126,16 @@
         frame-count-chan (h/counting-chan frame-chan-count)
 
         layout {:width 600
-                :height 400
+                :height 300
                 :padding 5
                 :paddle-size 80}
         init-vals {:init-pos [5 100]
                    :init-vel [0.2 0.22]
                    :paddle-movement 10}]
+    (doto (dom/by-id "canvas")
+      (dom/set-style! "width" (str (:width layout) "px"))
+      (dom/set-style! "height" (str (:height layout) "px")))
+    
     (go-loop
       (dom/set-text! (dom/by-id "fps") (<! fps-chan))
       (dom/set-text! (dom/by-id "frame") (<! frame-count-chan)))
