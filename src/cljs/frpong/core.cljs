@@ -52,19 +52,19 @@
 
 (defn collision-detector 
   [{:keys [width height padding]} tick-chan pos-chan vel-chan-in vel-chan-out]
-  (go-loop
-    (let [adjust-v (fn [p v size]
+  (let [adjust-v (fn [p v size]
                       (cond
                         (< p padding) (abs v)
                         (> p (- size padding)) (- (abs v))
-                        :else v))
-          tick (<! tick-chan)
-          [vel-x vel-y] (<! vel-chan-in)
-          [x y] (<! pos-chan)
-          [xn yn] [(+ x (* vel-x tick)) (+ y (* vel-y tick))]
-          vel-xn (adjust-v xn vel-x width)
-          vel-yn (adjust-v yn vel-y height)]
-      (>! vel-chan-out [vel-xn vel-yn]))))
+                        :else v))]
+    (go-loop
+      (let [tick (<! tick-chan)
+            [vel-x vel-y] (<! vel-chan-in)
+            [x y] (<! pos-chan)
+            [xn yn] [(+ x (* vel-x tick)) (+ y (* vel-y tick))]
+            vel-xn (adjust-v xn vel-x width)
+            vel-yn (adjust-v yn vel-y height)]
+        (>! vel-chan-out [vel-xn vel-yn])))))
 
 (defn paddle-positioner [keycodes max-y movement pos-chan-in pos-chan-out]
   (let [key-chan (h/key-chan keycodes)]
@@ -76,18 +76,22 @@
           :down (>! pos-chan-out (min (+ pos movement) max-y)))))))
 
 (defn renderer [pos-chan vel-chan pl-pos-chan pr-pos-chan]
+  (let [pos-el (dom/by-id "pos")
+        vel-el (dom/by-id "vel")
+        ball-el (dom/by-id "ball")
+        lpaddle-el (dom/by-id "lpaddle")
+        rpaddle-el (dom/by-id "rpaddle")]
   (go-loop
-    (let [[x y] (map int (<! pos-chan))
-          vel (<! vel-chan)]
-      (dom/set-text! (dom/by-id "pos") [x y])
-      (dom/set-text! (dom/by-id "vel") vel)
-      (doto (dom/by-id "ball")
+    (let [[x y] (<! pos-chan)]
+      (dom/set-text! pos-el (map int [x y]))
+      (dom/set-text! vel-el (<! vel-chan))
+      (doto ball-el
         (dom/set-attr! "cx" x)
         (dom/set-attr! "cy" y))))
   (go-loop
-    (dom/set-attr! (dom/by-id "lpaddle") "y" (<! pl-pos-chan)))
+    (dom/set-attr! lpaddle-el "y" (<! pl-pos-chan)))
   (go-loop
-    (dom/set-attr! (dom/by-id "rpaddle") "y" (<! pr-pos-chan))))
+    (dom/set-attr! rpaddle-el "y" (<! pr-pos-chan)))))
 
 (defn game-setup [{:keys [width height padding paddle-size] :as layout} paddle-movement
                   frame-chan pos-chan vel-chan pl-pos-chan pr-pos-chan]
@@ -131,12 +135,15 @@
                 :paddle-size 80}
         init-vals {:init-pos [5 100]
                    :init-vel [0.2 0.22]
-                   :paddle-movement 10}]
+                   :paddle-movement 10}
+
+        fps-el (dom/by-id "fps")
+        frame-el (dom/by-id "frame")]
     (doto (dom/by-id "canvas")
       (dom/set-style! "width" (str (:width layout) "px"))
       (dom/set-style! "height" (str (:height layout) "px")))
     
     (go-loop
-      (dom/set-text! (dom/by-id "fps") (<! fps-chan))
-      (dom/set-text! (dom/by-id "frame") (<! frame-count-chan)))
+      (dom/set-text! fps-el (<! fps-chan))
+      (dom/set-text! frame-el (<! frame-count-chan)))
     (game-init layout init-vals frame-chan-game)))
