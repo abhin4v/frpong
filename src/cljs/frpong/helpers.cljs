@@ -21,6 +21,14 @@
         (>! c2 (<! c1))))
     c2))
 
+(defn probe [ch probe-name]
+  (let [c (chan)]
+    (go-loop
+      (let [v (<! ch)]
+        (log (str (now) " " probe-name ": " v))
+        (>! c v)))
+    c))
+
 (defn multiplex [in cs-or-n]
   (let [cs (if (number? cs-or-n)
              (repeatedly cs-or-n chan)
@@ -90,6 +98,18 @@
                       (do (>! c last)
                        (recur state nil))
                      (recur ::init last))))))
+    c))
+
+(defn sustain
+  ([source control]
+    (sustain (chan) source control))
+  ([c source control]
+    (go
+      (loop [last nil]
+        (let [[v ch] (alts! [source control] :priority true)]
+          (condp = ch
+            source (do (>! c v) (recur v))
+            control (do (when last (>! c last)) (recur last))))))
     c))
 
 (defn debounce
@@ -162,7 +182,9 @@
 
 (defn frame-chan []
   (let [c (chan (sliding-buffer 1000))
-        step (fn step [ts]  (do (put! c ts) (.requestAnimationFrame js/window step)))]
+        step (fn step [ts] 
+               (let [req-id (.requestAnimationFrame js/window step)]
+                 (put! c [ts req-id])))]
     (.requestAnimationFrame js/window step)
     c))
 
