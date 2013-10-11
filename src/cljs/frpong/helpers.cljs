@@ -13,20 +13,14 @@
   (doseq [c cs]
     (put! c x)))
 
-(defn cconj [v c1]
-  (let [c2 (chan)]
-    (go
-      (>! c2 v)
-      (while true
-        (>! c2 (<! c1))))
-    c2))
-
 (defn probe [ch probe-name]
   (let [c (chan)]
-    (go-loop
-      (let [v (<! ch)]
-        (log (str (now) " " probe-name ": " v))
-        (>! c v)))
+    (go (loop []
+          (if-let [v (<! ch)]
+            (do (log (str (now) " " probe-name ": " v))
+              (>! c v)
+              (recur))
+            (close! c))))
     c))
 
 (defn multiplex [in cs-or-n]
@@ -36,86 +30,72 @@
     (go (loop []
           (let [x (<! in)]
             (if-not (nil? x)
-              (do
-                (put-all! cs x)
-                (recur))
+              (do (put-all! cs x) (recur))
               :done))))
     cs))
 
-(defn copy-chan
-  ([c]
-    (first (multiplex c 1)))
-  ([out c]
-    (first (multiplex c [out]))))
 
 (defn dup-chan [c]
   (multiplex c 2))
 
-(defn map-chan
-  ([f source] (map-chan (chan) f source))
-  ([c f source]
-    (go-loop
-      (>! c (f (<! source))))
+(defn map-chan [f source]
+  (let [c (chan)]
+    (go (loop []
+          (if-let [v (<! source)]
+            (do (>! c (f v)) (recur))
+            (close! c))))
     c))
 
-(defn filter-chan
-  ([f source] (filter-chan (chan) f source))
-  ([c f source]
-    (go-loop
-      (let [v (<! source)]
-        (when (f v)
-          (>! c v))))
+(defn filter-chan [f source]
+  (let [c (chan)]
+    (go (loop []
+          (if-let [v (<! source)]
+            (do (when (f v) (>! c v)) (recur))
+            (close! c))))
     c))
 
 (defn interval-chan
   ([msecs]
     (interval-chan msecs :leading))
   ([msecs type]
-    (interval-chan (chan (dropping-buffer 1)) msecs type))
-  ([c msecs type]
-    (condp = type
-      :leading (go-loop
-                 (>! c (now))
-                 (<! (timeout msecs)))
-      :falling (go-loop
-                 (<! (timeout msecs))
-                 (>! c (now))))
-    c))
+    (let [c (chan (dropping-buffer 1))]
+      (condp = type
+        :leading (go-loop
+                   (>! c (now))
+                   (<! (timeout msecs)))
+        :falling (go-loop
+                   (<! (timeout msecs))
+                   (>! c (now))))
+      c)))
 
-(defn throttle
-  ([source control]
-    (throttle (chan) source control))
-  ([c source control]
+(defn throttle [source control]
+  (let [c (chan)]
     (go
       (loop [state ::init last nil]
         (let [[v sc] (alts! [source control])]
           (condp = sc
             source (condp = state
-                     ::init (do (>! c v)
-                              (recur ::throttling last))
+                     ::init (do (>! c v) (recur ::throttling last))
                      ::throttling (recur state v))
             control (if last 
-                      (do (>! c last)
-                       (recur state nil))
+                      (do (>! c last) (recur state nil))
                      (recur ::init last))))))
     c))
 
-(defn sustain
-  ([source control]
-    (sustain (chan) source control))
-  ([c source control]
+(defn sustain [source control]
+  (let [c (chan)]
     (go
       (loop [last nil]
         (let [[v ch] (alts! [source control] :priority true)]
-          (condp = ch
-            source (do (>! c v) (recur v))
-            control (do (when last (>! c last)) (recur last))))))
+          (if (nil? v)
+            (close! c)
+            (condp = ch
+              source (do (>! c v) (recur v))
+              control (do (when last (>! c last)) (recur last)))))))
     c))
 
-(defn debounce
-  ([source msecs]
-    (debounce (chan) source msecs))
-  ([c source msecs]
+(defn debounce [source msecs]
+  (let [c (chan)]
     (go
       (loop [state ::init cs [source]]
         (let [[_ threshold] cs]
@@ -132,10 +112,8 @@
               threshold (recur ::init (pop cs)))))))
     c))
 
-(defn after-last
-  ([source msecs]
-    (after-last (chan) source msecs))
-  ([c source msecs]
+(defn after-last [source msecs]
+  (let [c (chan)]
     (go
       (loop [cs [source]]
         (let [[_ toc] cs]
@@ -147,22 +125,19 @@
                 toc (do (>! c (now)) (pop cs))))))))
     c))
 
-(defn fan-in
-  ([ins] (fan-in (chan) ins))
-  ([c ins]
-    (go (while true
-          (let [[x] (alts! ins)]
-            (>! c x))))
+(defn fan-in [ins]
+  (let [c (chan)]
+    (go-loop
+      (let [[x] (alts! ins)]
+        (>! c x)))
     c))
 
-(defn distinct-chan
-  ([source] (distinct-chan (chan) source))
-  ([c source]
+(defn distinct-chan [source]
+  (let [c (chan)]
     (go
       (loop [last ::init]
         (let [v (<! source)]
-          (when-not (= last v)
-            (>! c v))
+          (when-not (= last v) (>! c v))
           (recur v))))
     c))
 
@@ -181,20 +156,28 @@
     c))
 
 (defn frame-chan []
-  (let [c (chan (sliding-buffer 1000))
+  (let [fc (chan (sliding-buffer 1000))
+        rc (chan (sliding-buffer 10))
         step (fn step [ts] 
                (let [req-id (.requestAnimationFrame js/window step)]
-                 (put! c [ts req-id])))]
+                 (put! fc ts)
+                 (put! rc req-id)))
+        stop-fn (fn []
+                  (go (loop []
+                        (if-let [id (<! rc)]
+                          (do (.cancelAnimationFrame js/window id) (recur)))))
+                  (close! fc)
+                  (close! rc))]
     (.requestAnimationFrame js/window step)
-    c))
+    [fc stop-fn]))
 
 (defn counting-chan [source]
   (let [c (chan)]
     (go
       (loop [count 0]
-        (<! source)
-        (>! c count)
-        (recur (inc count))))
+        (if-let [v (<! source)]
+          (do (>! c count) (recur (inc count)))
+          (close! c))))
     c))
 
 (defn diff-chan [source]
@@ -202,17 +185,17 @@
     (go
       (let [start (<! source)]
         (loop [start start]
-          (let [ts (<! source)]
-            (>! c (- ts start))
-            (recur ts)))))
+          (if-let [v (<! source)]
+            (do (>! c (- v start)) (recur v))
+            (close! c)))))
     c))
 
 (defn dropping-chan [source n]
   (let [c (chan)]
     (go
       (loop [count 0]
-        (if (= count 0)
-          (>! c (<! source))
-          (<! source))
-        (recur (rem (inc count) n))))
+        (if-let [v (<! source)]
+          (do (when (= count 0) (>! c v))
+            (recur (rem (inc count) n)))
+          (close! c))))
     c))
