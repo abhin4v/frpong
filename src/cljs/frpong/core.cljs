@@ -40,6 +40,13 @@
             (recur t))))
     c))
 
+(defn ticker [[frames stop-frames] ticks game-state]
+  (let [ticks-in (tick-chan (h/diff-chan frames))]
+    (go-loop
+      (if-not (= :gameover (<! game-state))
+        (>! ticks (<! ticks-in))
+        (stop-frames)))))
+
 (defn ball-positioner [ticks vel pos-in pos-out]
   (go-loop
     (let [tick          (<! ticks)
@@ -59,7 +66,7 @@
 
 (defn collision-detector
   [{:keys [width height padding paddle-size paddle-width]}
-   ticks game-state pos pl-pos pr-pos vel-in vel-out]
+   ticks game-state pos vel-in vel-out pl-pos pr-pos]
   (let [ef-paddle-width (+ paddle-width padding)
         adjust-v (fn [state v] [(condp = state
                                   :collision-left  (abs v)
@@ -114,15 +121,8 @@
   (go-loop
     (dom/set-attr! rpaddle-el "y" (<! pr-pos)))))
 
-(defn ticker [frames stop-frames ticks game-state]
-  (let [ticks-in (tick-chan (h/diff-chan frames))]
-    (go-loop
-      (if (not= :gameover (<! game-state))
-        (>! ticks (<! ticks-in))
-        (stop-frames)))))
-
 (defn game-setup [{:keys [width height padding paddle-size] :as layout} paddle-movement
-                  frames stop-frames game-state pos vel pl-pos pr-pos]
+                  frames game-state pos vel pl-pos pr-pos]
   (let [max-y                                      (- height paddle-size)
         ticks                                      (chan)
         [tick-pos tick-collsion tick-pl tick-pr]   (h/multiplex ticks 4)
@@ -130,19 +130,18 @@
         [vel-pos vel-collision]                    (h/multiplex vel 2)
         [pl-pos-in pl-pos-collision pl-pos-render] (h/multiplex pl-pos 3)
         [pr-pos-in pr-pos-collision pr-pos-render] (h/multiplex pr-pos 3)
-        [game-state-ticker game-state-render]      (h/dup-chan game-state)]
-    (ticker frames stop-frames ticks game-state-ticker)
+        [game-state-ticker game-state-render]      (h/multiplex game-state 2)]
+    (ticker frames ticks game-state-ticker)
     (ball-positioner tick-pos vel-pos pos-in pos)
-    (collision-detector layout tick-collsion game-state pos-collision
+    (collision-detector layout tick-collsion game-state pos-collision vel-collision vel
       (h/sustain pl-pos-collision tick-pl)
-      (h/sustain pr-pos-collision tick-pr)
-      vel-collision vel)
+      (h/sustain pr-pos-collision tick-pr))
     (paddle-positioner {83 :down 87 :up} max-y paddle-movement pl-pos-in pl-pos)
     (paddle-positioner {38 :up 40 :down} max-y paddle-movement pr-pos-in pr-pos)
     [game-state-render pos-render pl-pos-render pr-pos-render]))
 
 (defn game-init [{:keys [height paddle-size] :as layout}
-                 {:keys [init-pos init-vel paddle-movement]} frames stop-frames]
+                 {:keys [init-pos init-vel paddle-movement]} frames]
   (let [init-paddle-pos (/ (- height paddle-size) 2)
         pos             (chan 1)
         vel             (chan 1)
@@ -156,15 +155,10 @@
     (put! game-state :moving)
 
     (apply renderer
-      (game-setup layout paddle-movement frames stop-frames game-state pos vel pl-pos pr-pos))))
+      (game-setup layout paddle-movement frames game-state pos vel pl-pos pr-pos))))
 
 (defn ^:export init []
-  (let [[frames stop-frames]                  (h/frame-chan)
-        [frames-fps frames-count frames-game] (h/multiplex frames 3)
-        fps                                   (h/map-chan #(/ 1000 %) (h/diff-chan frames-fps))
-        frames-count                          (h/counting-chan frames-count)
-
-        layout    {:width 800
+  (let [layout    {:width 800
                    :height 400
                    :padding 5
                    :paddle-size 100
@@ -173,6 +167,11 @@
         init-vals {:init-pos [50 100]
                    :init-vel [0.3 0.33]
                    :paddle-movement 20}
+
+        [frames stop-frames]                  (h/frame-chan)
+        [frames-fps frames-count frames-game] (h/multiplex frames 3)
+        fps                                   (h/map-chan #(/ 1000 %) (h/diff-chan frames-fps))
+        frames-count                          (h/counting-chan frames-count)
 
         fps-el   (dom/by-id "fps")
         frame-el (dom/by-id "frame")]
@@ -194,4 +193,4 @@
     (go-loop
       (dom/set-text! fps-el (<! fps))
       (dom/set-text! frame-el (<! frames-count)))
-    (game-init layout init-vals frames-game stop-frames)))
+    (game-init layout init-vals [frames-game stop-frames])))

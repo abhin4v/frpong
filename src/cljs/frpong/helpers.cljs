@@ -34,10 +34,6 @@
               :done))))
     cs))
 
-
-(defn dup-chan [c]
-  (multiplex c 2))
-
 (defn map-chan [f source]
   (let [c (chan)]
     (go (loop []
