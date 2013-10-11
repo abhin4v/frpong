@@ -1,9 +1,7 @@
 (ns frpong.core
   (:require [frpong.helpers :as h]
-            [cljs.core.async :as async
-             :refer [<! >! chan put! close! sliding-buffer dropping-buffer timeout]]
-            [domina :as dom :refer [log]]
-            [domina.events :as ev])
+            [cljs.core.async :refer [<! >! chan put!]]
+            [domina :as dom :refer [log]])
   (:require-macros [cljs.core.async.macros :as m :refer [go]]
                    [frpong.core :refer (go-loop)]))
 ;;
@@ -44,45 +42,51 @@
 
 (defn ball-positioner [ticks vel pos-in pos-out]
   (go-loop
-    (let [tick (<! ticks)
+    (let [tick          (<! ticks)
           [vel-x vel-y] (<! vel)
-          [x y] (<! pos-in)
-          pos-next [(+ x (* vel-x tick)) (+ y (* vel-y tick))]]
+          [x y]         (<! pos-in)
+          pos-next      [(+ x (* vel-x tick)) (+ y (* vel-y tick))]]
       (>! pos-out pos-next))))
+
+(defn paddle-positioner [keycodes max-y movement pos-in pos-out]
+  (let [keys (h/key-chan keycodes)]
+    (go-loop
+      (let [pos (<! pos-in)]
+        (>! pos-out
+          (condp = (<! keys)
+            :up   (max (- pos movement) 0)
+            :down (min (+ pos movement) max-y)))))))
 
 (defn collision-detector
   [{:keys [width height padding paddle-size paddle-width]}
    ticks game-state pos pl-pos pr-pos vel-in vel-out]
-  (let [adjust-v (fn [state v] [(condp = state
-                                  :collision-left (abs v)
+  (let [ef-paddle-width (+ paddle-width padding)
+        adjust-v (fn [state v] [(condp = state
+                                  :collision-left  (abs v)
                                   :collision-right (- (abs v))
-                                  :moving v
-                                  :gameover 0)
+                                  :moving          v
+                                  :gameover        0)
                                 state])
-        detect-y-collision (fn [y] (cond
-                                     (< y padding) :collision-left
-                                     (> y (- height padding)) :collision-right
-                                     :else :moving))
+        in-y-range? (fn [y p-pos] (and (> y (+ p-pos padding))
+                                    (< y (- (+ p-pos paddle-size) padding))))
         detect-x-collision (fn [x y pl-pos pr-pos]
                              (cond
-                               (< x (+ paddle-width padding))
-                                 (if (and (> y (+ pl-pos padding))
-                                       (< y (- (+ pl-pos paddle-size) padding)))
-                                   :collision-left
-                                   :gameover)
-                               (> x (- width (+ paddle-width padding)))
-                                 (if (and (> y (+ pr-pos padding))
-                                    (< y (- (+ pr-pos paddle-size) padding)))
-                                   :collision-right
-                                   :gameover)
-                               :else :moving))]
+                               (< x ef-paddle-width)
+                                 (if (in-y-range? y pl-pos) :collision-left :gameover)
+                               (> x (- width ef-paddle-width))
+                                 (if (in-y-range? y pr-pos) :collision-right :gameover)
+                               :else :moving))
+        detect-y-collision (fn [y] (cond
+                                     (< y padding)            :collision-left
+                                     (> y (- height padding)) :collision-right
+                                     :else                    :moving))]
     (go-loop
-      (let [tick (<! ticks)
+      (let [tick          (<! ticks)
             [vel-x vel-y] (<! vel-in)
-            [x y] (<! pos)
-            pl-pos (<! pl-pos)
-            pr-pos (<! pr-pos)
-            [xn yn] [(+ x (* vel-x tick)) (+ y (* vel-y tick))]
+            [x y]         (<! pos)
+            pl-pos        (<! pl-pos)
+            pr-pos        (<! pr-pos)
+            [xn yn]       [(+ x (* vel-x tick)) (+ y (* vel-y tick))]
             [vel-xn bs-x] (adjust-v (detect-x-collision xn yn pl-pos pr-pos) vel-x)
             [vel-yn bs-y] (adjust-v (detect-y-collision yn) vel-y)]
         (>! vel-out [vel-xn vel-yn])
@@ -93,27 +97,14 @@
               (= bs-y :collision-left) (= bs-y :collision-right)) :collision 
             :else :moving))))))
 
-(defn paddle-positioner [keycodes max-y movement pos-in pos-out]
-  (let [keys (h/key-chan keycodes)]
-    (go-loop
-      (let [pos (<! pos-in)]
-        (>! pos-out
-          (condp = (<! keys)
-            :up (max (- pos movement) 0)
-            :down (min (+ pos movement) max-y)))))))
-
-(defn renderer [game-state pos vel pl-pos pr-pos]
-  (let [pos-el (dom/by-id "pos")
-        vel-el (dom/by-id "vel")
-        ball-el (dom/by-id "ball")
-        state-el (dom/by-id "state")
+(defn renderer [game-state pos pl-pos pr-pos]
+  (let [ball-el    (dom/by-id "ball")
+        state-el   (dom/by-id "state")
         lpaddle-el (dom/by-id "lpaddle")
         rpaddle-el (dom/by-id "rpaddle")]
   (go-loop
     (let [[x y] (<! pos)
-          gs (<! game-state)]
-      (dom/set-text! pos-el (map int [x y]))
-      (dom/set-text! vel-el (<! vel))
+          gs    (<! game-state)]
       (dom/set-text! state-el (name gs))
       (doto ball-el
         (dom/set-attr! "cx" x)
@@ -132,14 +123,14 @@
 
 (defn game-setup [{:keys [width height padding paddle-size] :as layout} paddle-movement
                   frames stop-frames game-state pos vel pl-pos pr-pos]
-  (let [max-y (- height paddle-size)
-        ticks (chan)
-        [tick-pos tick-collsion tick-pl tick-pr] (h/multiplex ticks 4)
-        [pos-in pos-collision pos-render] (h/multiplex pos 3)
-        [vel-pos vel-collision vel-render] (h/multiplex vel 3)
+  (let [max-y                                      (- height paddle-size)
+        ticks                                      (chan)
+        [tick-pos tick-collsion tick-pl tick-pr]   (h/multiplex ticks 4)
+        [pos-in pos-collision pos-render]          (h/multiplex pos 3)
+        [vel-pos vel-collision]                    (h/multiplex vel 2)
         [pl-pos-in pl-pos-collision pl-pos-render] (h/multiplex pl-pos 3)
         [pr-pos-in pr-pos-collision pr-pos-render] (h/multiplex pr-pos 3)
-        [game-state-ticker game-state-render] (h/dup-chan game-state)]
+        [game-state-ticker game-state-render]      (h/dup-chan game-state)]
     (ticker frames stop-frames ticks game-state-ticker)
     (ball-positioner tick-pos vel-pos pos-in pos)
     (collision-detector layout tick-collsion game-state pos-collision
@@ -148,16 +139,16 @@
       vel-collision vel)
     (paddle-positioner {83 :down 87 :up} max-y paddle-movement pl-pos-in pl-pos)
     (paddle-positioner {38 :up 40 :down} max-y paddle-movement pr-pos-in pr-pos)
-    [game-state-render pos-render vel-render pl-pos-render pr-pos-render]))
+    [game-state-render pos-render pl-pos-render pr-pos-render]))
 
 (defn game-init [{:keys [height paddle-size] :as layout}
                  {:keys [init-pos init-vel paddle-movement]} frames stop-frames]
   (let [init-paddle-pos (/ (- height paddle-size) 2)
-        pos (chan 1)
-        vel (chan 1)
-        pl-pos (chan 1)
-        pr-pos (chan 1)
-        game-state (chan 1)]
+        pos             (chan 1)
+        vel             (chan 1)
+        pl-pos          (chan 1)
+        pr-pos          (chan 1)
+        game-state      (chan 1)]
     (put! pos init-pos)
     (put! vel init-vel)
     (put! pl-pos init-paddle-pos)
@@ -168,23 +159,22 @@
       (game-setup layout paddle-movement frames stop-frames game-state pos vel pl-pos pr-pos))))
 
 (defn ^:export init []
-  (let [[frames stop-frames] (h/frame-chan)
+  (let [[frames stop-frames]                  (h/frame-chan)
         [frames-fps frames-count frames-game] (h/multiplex frames 3)
+        fps                                   (h/map-chan #(/ 1000 %) (h/diff-chan frames-fps))
+        frames-count                          (h/counting-chan frames-count)
 
-        fps (h/map-chan #(/ 1000 %) (h/diff-chan frames-fps))
-        frames-count (h/counting-chan frames-count)
-
-        layout {:width 800
-                :height 400
-                :padding 5
-                :paddle-size 100
-                :paddle-width 10
-                :ball-radius 5}
+        layout    {:width 800
+                   :height 400
+                   :padding 5
+                   :paddle-size 100
+                   :paddle-width 10
+                   :ball-radius 5}
         init-vals {:init-pos [50 100]
                    :init-vel [0.3 0.33]
                    :paddle-movement 20}
 
-        fps-el (dom/by-id "fps")
+        fps-el   (dom/by-id "fps")
         frame-el (dom/by-id "frame")]
     (doto (dom/by-id "canvas")
       (dom/set-style! "width" (str (:width layout) "px"))
