@@ -63,11 +63,6 @@
         ball-radius     8
         ball-speed      0.33
         init-pos        [(/ width 2) (/ height 2)]
-        init-vel        (let [sgn #(if (< % 0.5) -1 1)
-                              deg (+ 35 (* 20 (rand)))
-                              rad (deg->rad deg)]
-                          (map #(* ball-speed %) 
-                            [(* (sgn (rand)) (sin rad)) (* (sgn (rand)) (cos rad))]))
         paddle-step     20
         max-paddle-y    (- height paddle-size)
         ef-paddle-width (+ paddle-width padding)
@@ -94,12 +89,17 @@
     (defn start-game
       "Sets up the game by creating the signals and setting up the components and starts the game."
       []
-      (let [frames     (frame-chan)  ;; frames signal
-            pos        (chan 1)      ;; ball position signal
-            vel        (chan 1)      ;; ball velocity signal
-            pl-pos     (chan 1)      ;; paddle left position signal
-            pr-pos     (chan 1)      ;; paddle right position signal
-            game-state (chan 1)]     ;; game state signal, the state of the game and the current score
+      (let [frames     (frame-chan) ;; frames signal
+            pos        (chan 1)     ;; ball position signal
+            vel        (chan 1)     ;; ball velocity signal
+            pl-pos     (chan 1)     ;; paddle left position signal
+            pr-pos     (chan 1)     ;; paddle right position signal
+            game-state (chan 1)     ;; game state signal, the state of the game and the current score
+            init-vel   (let [sgn #(if (< % 0.5) -1 1)
+                              deg (+ 35 (* 20 (rand)))
+                              rad (deg->rad deg)]
+                          (map #(* ball-speed %) 
+                            [(* (sgn (rand)) (sin rad)) (* (sgn (rand)) (cos rad))]))]
         (setup-components frames game-state pos vel pl-pos pr-pos)
 
         ;; start the game by setting the initial values of the signals
@@ -272,7 +272,7 @@
                 (dom/set-text! score-el score))
               (when (= state :gameover)
                 (do (dom/set-text! state-el "press <space> to restart")
-                  (ev/listen-once! :keypress #(.reload (.-location js/window)))))
+                  (ev/listen-once! :keypress start-game)))
               (doto ball-el
                 (dom/set-attr! "cx" x)
                 (dom/set-attr! "cy" y))
