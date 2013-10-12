@@ -2,13 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Simple CLJS</title>
+    <title>Functional Reactive Pong in Clojure using core.async</title>
     <!--[if lt IE 9]>
     <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
 </head>
 <body>
-    <div>Frame: <span id="frame"></span></div>
     <div>FPS: <span id="fps"></span></div>
     <div>State: <span id="state"></span></div>
     <svg style="border: 1px black solid" id="canvas">
@@ -19,6 +18,6 @@
     
     <!-- pointing to cljsbuild generated js file -->
     <script src="js/frpong.js"></script>
-    <script type="text/javascript">frpong.core.init()</script>
+    <script type="text/javascript">frpong.core.frpong()</script>
 </body>
 </html>

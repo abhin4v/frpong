@@ -195,3 +195,70 @@
             (recur (rem (inc count) n)))
           (close! c))))
     c))
+
+(defprotocol Mux
+  (muxch* [_]))
+
+(defprotocol Mult
+  (tap* [m ch close?])
+  (untap* [m ch])
+  (untap-all* [m]))
+
+(defn mult
+  "Creates and returns a mult(iple) of the supplied channel. Channels
+  containing copies of the channel can be created with 'tap', and
+  detached with 'untap'.
+
+  Each item is distributed to all taps in parallel and synchronously,
+  i.e. each tap must accept before the next item is distributed. Use
+  buffering/windowing to prevent slow taps from holding up the mult.
+
+  Items received when there are no taps get dropped.
+
+  If a tap put throws an exception, it will be removed from the mult."
+  [ch]
+  (let [cs (atom {}) ;;ch->close?
+        m (reify
+            Mux
+            (muxch* [_] ch)
+
+            Mult
+            (tap* [_ ch close?] (swap! cs assoc ch close?) nil)
+            (untap* [_ ch] (swap! cs dissoc ch) nil)
+            (untap-all* [_] (reset! cs {}) nil))
+        dchan (chan 1)
+        dctr (atom nil)
+        done #(when (zero? (swap! dctr dec))
+                (put! dchan true))]
+    (go (loop []
+      (let [val (<! ch)]
+        (if (nil? val)
+          (doseq [[c close?] @cs]
+            (when close? (close! c)))
+          (let [chs (keys @cs)]
+            (reset! dctr (count chs))
+            (doseq [c chs]
+              (put! c val done))
+            ;;wait for all
+            (when (seq chs)
+              (<! dchan))
+            (recur))))))
+    m))
+
+(defn tap
+  "Copies the mult source onto the supplied channel.
+
+  By default the channel will be closed when the source closes,
+  but can be determined by the close? parameter."
+  ([mult] (tap mult (chan)))
+  ([mult ch] (tap mult ch true))
+  ([mult ch close?] (tap* mult ch close?) ch))
+
+(defn untap
+  "Disconnects a target channel from a mult"
+  [mult ch]
+  (untap* mult ch))
+
+(defn untap-all
+  "Disconnects all target channels from a mult"
+  [mult] (untap-all* mult))
