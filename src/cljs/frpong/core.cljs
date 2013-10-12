@@ -260,20 +260,23 @@
             (let [fps           (int (/ 1000 (<! ticks)))
                   [x y]         (<! pos)
                   [state score] (<! game-state)
-                  state         (condp = state
+                  state-text    (condp = state
                                   :moving "Playing"
                                   :collision "Playing"
                                   :gameover "Game Over")]
               (when-not (= fps fps-p)
                 (dom/set-text! fps-el fps))
               (when-not (= state state-p)
-                (dom/set-text! state-el state))
+                (dom/set-text! state-el state-text))
               (when-not (= score score-p)
                 (dom/set-text! score-el score))
+              (when (= state :gameover)
+                (do (dom/set-text! state-el "press <space> to restart")
+                  (ev/listen-once! :keypress #(.reload (.-location js/window)))))
               (doto ball-el
                 (dom/set-attr! "cx" x)
                 (dom/set-attr! "cy" y))
-              (recur fps state score))))
+              (recur fps state-text score))))
       (go-loop
         (dom/set-attr! lpaddle-el "y" (<! pl-pos)))
       (go-loop
