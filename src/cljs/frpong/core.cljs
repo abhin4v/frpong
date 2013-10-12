@@ -184,7 +184,7 @@
        Reads the current tick, ball position, ball velocity and left and right paddle positions from
        the `ticks`, `pos`, `vel-in`, `pl-pos` and `pr-pos` signals respectively."
       (defn in-y-range? [y paddle-y]
-        (and (> y (+ paddle-y padding)) (< y (- (+ paddle-y paddle-size) padding))))
+        (and (> y (- paddle-y padding)) (< y (+ paddle-y paddle-size padding))))
 
       (defn detect-x-collision [x y lpaddle-y rpaddle-y]
         (cond
