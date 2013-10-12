@@ -6,17 +6,47 @@
     <!--[if lt IE 9]>
     <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
+    <style type="text/css">
+body {
+    font-family: monospace;
+}
+
+#ball {
+    fill: orange;
+}
+
+#rpaddle, #lpaddle {
+    fill: rgb(108, 182, 108);
+}
+
+#state {
+    font-size: 1.5em;
+    text-align: center;
+}
+
+#canvas {
+    border: 2px green solid;
+}
+    </style>
 </head>
 <body>
-    <div>FPS: <span id="fps"></span></div>
-    <div>State: <span id="state"></span></div>
-    <div>Score: <span id="score"></span></div>
-    <div>Velocity: <span id="vel"></span></div>
-    <svg style="border: 1px black solid" id="canvas">
-        <circle id="ball" />
-        <rect id="lpaddle" />
-        <rect id="rpaddle" />
-    </svg>
+    <center>
+        <div id="screen">
+            <div>
+                <div id="state">press any key to start</div>
+            </div>
+            <svg id="canvas">
+                <circle id="ball" />
+                <rect id="lpaddle" />
+                <rect id="rpaddle" />
+            </svg>
+            <div>
+                <div style="float: left">score <span id="score">0</span></div>
+                use W-S keys to move the left paddle and Up-Down arrow keys to move the right paddle
+                <div style="float: right"><span id="fps">0</span> fps</div>
+            </div>
+        </div>
+    </center>
     
     <!-- pointing to cljsbuild generated js file -->
     <script src="js/frpong.js"></script>

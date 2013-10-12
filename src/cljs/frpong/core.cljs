@@ -54,12 +54,13 @@
   [(+ x (* vel-x tick)) (+ y (* vel-y tick))])
 
 (defn ^:export frpong []
-  (let [width           800
-        height          400
+  (let [body-el         (.-body js/document)
+        width           (- (.-scrollWidth body-el) 20)
+        height          (- (.-scrollHeight body-el) 125)
         padding         5
         paddle-size     100
         paddle-width    10
-        ball-radius     5
+        ball-radius     8
         ball-speed      0.33
         init-pos        [(/ width 2) (/ height 2)]
         init-vel        (let [sgn #(if (< % 0.5) -1 1)
@@ -135,7 +136,7 @@
         (collision-detector (tap ticks-m) (tap pos-m) (tap vel-m) 
           pl-pos-sust pr-pos-sust (tap game-state-m) game-state vel)
 
-        (renderer (tap ticks-m) (tap game-state-m) (tap pos-m) (tap vel-m) (tap pl-pos-m) (tap pr-pos-m))))
+        (renderer (tap ticks-m) (tap game-state-m) (tap pos-m) (tap pl-pos-m) (tap pr-pos-m))))
 
     (defn ticker 
       "Ticker component.
@@ -248,25 +249,31 @@
       "Renderer component.
        Renders the ball and paddle positions on the browser. Also shows the game state and stats.
        Reads the current values from the signals supplied as parameters."
-      [ticks game-state pos vel pl-pos pr-pos]
+      [ticks game-state pos pl-pos pr-pos]
       (let [ball-el    (dom/by-id "ball")
             state-el   (dom/by-id "state")
             score-el   (dom/by-id "score")
             lpaddle-el (dom/by-id "lpaddle")
             rpaddle-el (dom/by-id "rpaddle")
-            fps-el     (dom/by-id "fps")
-            vel-el     (dom/by-id "vel")]
-      (go-loop
-        (let [fps           (/ 1000 (<! ticks))
-              [x y]         (<! pos)
-              [state score] (<! game-state)]
-          (dom/set-text! fps-el fps)
-          (dom/set-text! state-el (name state))
-          (dom/set-text! score-el score)
-          (dom/set-text! vel-el (<! vel))
-          (doto ball-el
-            (dom/set-attr! "cx" x)
-            (dom/set-attr! "cy" y))))
+            fps-el     (dom/by-id "fps")]
+      (go (loop [fps-p nil state-p nil score-p nil]
+            (let [fps           (int (/ 1000 (<! ticks)))
+                  [x y]         (<! pos)
+                  [state score] (<! game-state)
+                  state         (condp = state
+                                  :moving "Playing"
+                                  :collision "Playing"
+                                  :gameover "Game Over")]
+              (when-not (= fps fps-p)
+                (dom/set-text! fps-el fps))
+              (when-not (= state state-p)
+                (dom/set-text! state-el state))
+              (when-not (= score score-p)
+                (dom/set-text! score-el score))
+              (doto ball-el
+                (dom/set-attr! "cx" x)
+                (dom/set-attr! "cy" y))
+              (recur fps state score))))
       (go-loop
         (dom/set-attr! lpaddle-el "y" (<! pl-pos)))
       (go-loop
