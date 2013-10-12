@@ -101,7 +101,7 @@
        The signals are taken as parameters."
       [frames game-state pos vel pl-pos pr-pos]
       (let [ticks        (chan)             ;; tick signal
-            ticks-m      (mult ticks)       ;; mutliplexers for all signals
+            ticks-m      (mult ticks)       ;; multiplexers for all signals
             pos-m        (mult pos)
             vel-m        (mult vel)
             pl-pos-m     (mult pl-pos)
@@ -128,7 +128,8 @@
       "Ticker component.
        Converts `frames` signal to ticks and outputs them to the `ticks` signal
        as long as the `game-state` signal is not :gameover. Once the `game-state` signal is 
-       :gameover, stops the `frames` signal hence stopping the entire game."
+       :gameover, stops the `frames` signal hence stopping the entire game.
+       Each tick is the number of milliseconds since the last tick was generated."
       [frames game-state ticks]
       (let [ticks-in (tick-chan (diff-chan frames))]
         (go (loop []
@@ -148,7 +149,12 @@
               pos-next (next-pos (<! pos-in) (<! vel) tick)]
           (>! pos-out pos-next))))
 
-    (defn paddle-positioner [keycodes pos-in pos-out]
+    (defn paddle-positioner
+      "Paddle Positioner component.
+       Captures the keydown signal for the provides keycodes and calculates the next paddle
+       position using the current paddle position (from the `pos-in` signal) and keydown signal
+       and outputs it to the `pos-out` signal."
+      [keycodes pos-in pos-out]
       (let [keys (key-chan keycodes)]
         (go-loop
           (let [pos (<! pos-in)]
