@@ -30,6 +30,8 @@
 ;;                                                 +----------+
 
 (defn abs [x] (.abs js/Math x))
+(defn sqrt [x] (.sqrt js/Math x))
+(defn sq [x] (* x x))
 
 (def PI 3.141592653589793)
 
@@ -54,13 +56,15 @@
 (def *paddle-size*      100)
 (def *paddle-width*     10)
 (def *ball-radius*      8)
-(def *ball-speed*       0.33)
-(def *init-pos*         [(/ *width* 2) (/ *height* 2)])
+(def *ball-speed*       0.5)
+(def *center*           [(/ *width* 2 ) (/ *height* 2)])
 (def *paddle-step*      20)
 (def *max-paddle-y*     (- *height* *paddle-size*))
 (def *ef-paddle-width*  (+ *paddle-width* *padding*))
 (def *init-paddle-pos*  (/ (- *height* *paddle-size*) 2))
 (def *init-vel-deg-lim* [35 55])
+(def *perturb-factor*   0.02)
+(def *G*                0.01)
 
 (defn layout-game
   "Lays out the game screen."
@@ -70,8 +74,8 @@
       (dom/set-style! "height" (str *height* "px")))
   (doto (dom/by-id "ball")
     (dom/set-attr! "r" *ball-radius*)
-    (dom/set-attr! "cx" (first *init-pos*))
-    (dom/set-attr! "cy" (second *init-pos*)))
+    (dom/set-attr! "cx" (first *center*))
+    (dom/set-attr! "cy" (second *center*)))
   (doseq [id ["lpaddle" "rpaddle"]]
     (doto (dom/by-id id)
       (dom/set-attr! "width" *paddle-width*)
@@ -94,28 +98,33 @@
   (let [frames     (frame-chan) ;; frames signal
         pos        (chan 1)     ;; ball position signal
         vel        (chan 1)     ;; ball velocity signal
+        acc        (chan 1)
         pl-pos     (chan 1)     ;; paddle left position signal
         pr-pos     (chan 1)     ;; paddle right position signal
         game-state (chan 1)     ;; game state signal, the state of the game and the current score
         init-vel   (initial-velocity)]
-    (setup-components frames game-state pos vel pl-pos pr-pos)
+    (setup-components frames game-state pos vel acc pl-pos pr-pos)
 
     ;; start the game by setting the initial values of the signals
-    (put! pos *init-pos*)
+    (put! pos *center*)
     (put! vel init-vel)
     (put! pl-pos *init-paddle-pos*)
     (put! pr-pos *init-paddle-pos*)
     (put! game-state [:moving 0])))
 
+(defn start-on-space []
+  (ev/listen-once! :keypress #(if (= (:keyCode %) 32) (start-game) (start-on-space))))
+
 (defn setup-components
   "Creates mult(iple)s of the signals and sets up the components by connecting them using 
    the signals tapped from the mults.
    The signals are taken as parameters."
-  [frames game-state pos vel pl-pos pr-pos]
+  [frames game-state pos vel acc pl-pos pr-pos]
   (let [ticks        (chan)             ;; ticks signal
         ticks-m      (mult ticks)       ;; mult(iple)s for all signals
         pos-m        (mult pos)
         vel-m        (mult vel)
+        acc-m        (mult acc)
         pl-pos-m     (mult pl-pos)
         pr-pos-m     (mult pr-pos)
         game-state-m (mult game-state)
@@ -127,11 +136,12 @@
     ;; set up the components by tapping into mults
     (ticker frames (tap game-state-m) ticks)
 
-    (ball-positioner (tap ticks-m) (tap vel-m) (tap pos-m) pos)
+    (gravitation (tap pos-m) acc)
+    (ball-positioner (tap ticks-m) (tap pos-m) (tap vel-m) (tap acc-m) pos)
     (paddle-positioner {83 :down 87 :up} (tap pl-pos-m) pl-pos)
     (paddle-positioner {38 :up 40 :down} (tap pr-pos-m) pr-pos)
 
-    (collision-detector (tap ticks-m) (tap pos-m) (tap vel-m) 
+    (collision-detector (tap ticks-m) (tap pos-m) (tap vel-m) (tap acc-m)
       pl-pos-sust pr-pos-sust (tap game-state-m) game-state vel)
 
     (renderer (tap ticks-m) (tap game-state-m) (tap pos-m) (tap pl-pos-m) (tap pr-pos-m))))
@@ -151,17 +161,36 @@
                 (recur)
                 (stop-frames))))))))
 
-(defn next-pos [[x y] [vel-x vel-y] tick]
-  [(+ x (* vel-x tick)) (+ y (* vel-y tick))])
+(defn gravity-acc [[x y]]
+  (let [[cx cy]  *center*
+        x-dist   (- cx x)
+        y-dist   (- cy y)
+        distance (sqrt (+ (sq x-dist) (sq y-dist)))
+        bearing  [(/ x-dist distance) (/ y-dist distance)]]
+    (if-not (= distance 0)
+      (map #(* *G* % (/ 1 distance)) bearing)
+      [0 0])))
+
+(defn gravitation
+  "Gravitation component.
+   Calculates acceleration due to gravitation using the pos from the `pos-in` signal and outputs
+   it to the `acc` signal."
+  [pos-in acc]
+  (go-loop
+    (>! acc (gravity-acc (<! pos-in)))))
+
+(defn next-pos [[x y] [vel-x vel-y] [acc-x acc-y] tick]
+  [(+ x (* vel-x tick) (* acc-x (sq tick))) (+ y (* vel-y tick) (* acc-y (sq tick)))])
 
 (defn ball-positioner
   "Ball Positioner component.
-   Calculates the next ball position using the current ball position (from the `pos-in` signal)
-   and the current tick (from the `ticks` signal) and outputs it to the `pos-out` signal."
-  [ticks vel pos-in pos-out]
+   Calculates the next ball position using the current ball position, velocity and acceleration
+   (from the `pos-in`, `vel` and `acc` signals respectively) and the current tick (from the
+   `ticks` signal) and outputs it to the `pos-out` signal."
+  [ticks pos-in vel acc pos-out]
   (go-loop
     (let [tick     (<! ticks)
-          pos-next (next-pos (<! pos-in) (<! vel) tick)]
+          pos-next (next-pos (<! pos-in) (<! vel) (<! acc) tick)]
       (>! pos-out pos-next))))
 
 (defn paddle-positioner
@@ -205,35 +234,37 @@
     :moving          vel
     :gameover        0))
 
-(defn perturb [v] (* v (+ 1 (/ (- (rand) 0.5) 25))))
+(defn perturb [v] (* v (+ 1 (/ (- (rand) 0.5) (/ 0.5 *perturb-factor*)))))
 
-(defn collision-detector [ticks pos vel-in pl-pos pr-pos game-state-in game-state vel-out]
+(defn collision-detector [ticks pos vel-in acc pl-pos pr-pos game-state-in game-state vel-out]
   "Collision Detector component.
    Detects the collision of the ball with the walls and the paddles and accordingly calculates
    and outputs the next ball velocity and next game state to the `vel-out` and `game-state` 
    signals respectively.
-   Reads the current tick, ball position, ball velocity, left and right paddle positions and game state
-   from the `ticks`, `pos`, `vel-in`, `pl-pos`, `pr-pos` and `game-state` signals respectively."
+   Reads the current tick, ball position, ball velocity, ball acceleration, left and right paddle 
+   positions and game state from the `ticks`, `pos`, `vel-in`, `acc`, `pl-pos`, `pr-pos` 
+   and `game-state` signals respectively."
 
   (go-loop
     (let [;; get all current values
           tick            (<! ticks)
           [vel-x vel-y]   (<! vel-in)
           [x y]           (<! pos)
+          [gx gy]         (<! acc)
           lpaddle-y       (<! pl-pos)
           rpaddle-y       (<! pr-pos)
           [_ score]       (<! game-state-in)
           
           ;; calculate next position and detect collision
-          [xn yn]         (next-pos [x y] [vel-x vel-y] tick)
+          [xn yn]         (next-pos [x y] [vel-x vel-y] [gx gy] tick)
           x-state         (detect-x-collision xn yn lpaddle-y rpaddle-y)
           y-state         (detect-y-collision yn)
           x-collision     (collision? x-state)
           y-collision     (collision? y-state)
           
           ;; calculate next velocity and game state
-          vel-xn          (adjust-vel x-state vel-x)
-          vel-yn          (adjust-vel y-state vel-y)
+          vel-xn          (min *ball-speed* (+ (adjust-vel x-state vel-x) (* gx tick)))
+          vel-yn          (min *ball-speed* (+ (adjust-vel y-state vel-y) (* gy tick)))
           state-n         (cond
                             (= x-state :gameover)        :gameover
                             (or x-collision y-collision) :collision
@@ -277,7 +308,7 @@
             (dom/set-text! score-el score))
           (when (= state :gameover)
             (do (dom/set-text! state-el "press <space> to restart")
-              (ev/listen-once! :keypress #(when (= (:keyCode %) 32) (start-game)))))
+              (start-on-space)))
           (recur fps state-text score))))
   (go-loop
     (dom/set-attr! lpaddle-el "y" (<! pl-pos)))
@@ -287,4 +318,4 @@
 ;; Everything is ready now. Layout the game and start it on pressing <space>!
 (defn ^:export frpong []
   (layout-game)
-  (ev/listen-once! :keypress #(when (= (:keyCode %) 32) (start-game))))
+  (start-on-space))
