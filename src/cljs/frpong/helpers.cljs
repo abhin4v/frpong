@@ -23,17 +23,6 @@
             (close! c))))
     c))
 
-(defn multiplex [in cs-or-n]
-  (let [cs (if (number? cs-or-n)
-             (repeatedly cs-or-n chan)
-             cs-or-n)]
-    (go (loop []
-          (let [x (<! in)]
-            (if-not (nil? x)
-              (do (put-all! cs x) (recur))
-              :done))))
-    cs))
-
 (defn map-chan [f source]
   (let [c (chan)]
     (go (loop []

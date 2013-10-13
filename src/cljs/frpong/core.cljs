@@ -48,39 +48,45 @@
           (close! c))))
     c))
 
-(defn next-pos [[x y] [vel-x vel-y] tick]
-  [(+ x (* vel-x tick)) (+ y (* vel-y tick))])
-
-(def width           (- (.-scrollWidth (.-body js/document)) 20))
-(def height          (- (.-scrollHeight (.-body js/document)) 125))
-(def padding         5)
-(def paddle-size     100)
-(def paddle-width    10)
-(def ball-radius     8)
-(def ball-speed      0.33)
-(def init-pos        [(/ width 2) (/ height 2)])
-(def paddle-step     20)
-(def max-paddle-y    (- height paddle-size))
-(def ef-paddle-width (+ paddle-width padding))
-(def init-paddle-pos (/ (- height paddle-size) 2))
+(def *width*            (- (.-scrollWidth (.-body js/document)) 20))
+(def *height*           (- (.-scrollHeight (.-body js/document)) 125))
+(def *padding*          5)
+(def *paddle-size*      100)
+(def *paddle-width*     10)
+(def *ball-radius*      8)
+(def *ball-speed*       0.33)
+(def *init-pos*         [(/ *width* 2) (/ *height* 2)])
+(def *paddle-step*      20)
+(def *max-paddle-y*     (- *height* *paddle-size*))
+(def *ef-paddle-width*  (+ *paddle-width* *padding*))
+(def *init-paddle-pos*  (/ (- *height* *paddle-size*) 2))
+(def *init-vel-deg-lim* [35 55])
 
 (defn layout-game
   "Lays out the game screen."
   []
   (doto (dom/by-id "canvas")
-      (dom/set-style! "width" (str width "px"))
-      (dom/set-style! "height" (str height "px")))
+      (dom/set-style! "width" (str *width* "px"))
+      (dom/set-style! "height" (str *height* "px")))
   (doto (dom/by-id "ball")
-    (dom/set-attr! "r" ball-radius)
-    (dom/set-attr! "cx" (first init-pos))
-    (dom/set-attr! "cy" (second init-pos)))
+    (dom/set-attr! "r" *ball-radius*)
+    (dom/set-attr! "cx" (first *init-pos*))
+    (dom/set-attr! "cy" (second *init-pos*)))
   (doseq [id ["lpaddle" "rpaddle"]]
     (doto (dom/by-id id)
-      (dom/set-attr! "width" paddle-width)
-      (dom/set-attr! "height" paddle-size)
-      (dom/set-attr! "y" (/ (- height paddle-size) 2))))
+      (dom/set-attr! "width" *paddle-width*)
+      (dom/set-attr! "height" *paddle-size*)
+      (dom/set-attr! "y" (/ (- *height* *paddle-size*) 2))))
   (dom/set-attr! (dom/by-id "lpaddle") "x" 0)
-  (dom/set-attr! (dom/by-id "rpaddle") "x" (- width paddle-width)))
+  (dom/set-attr! (dom/by-id "rpaddle") "x" (- *width* *paddle-width*)))
+
+(defn initial-velocity []
+  (let [[l h] *init-vel-deg-lim*
+        sgn   #(if (< % 0.5) -1 1)
+        deg   (+ l (* (- h l) (rand)))
+        rad   (deg->rad deg)]
+    (map #(* *ball-speed* %) 
+      [(* (sgn (rand)) (sin rad)) (* (sgn (rand)) (cos rad))])))
 
 (defn start-game
   "Sets up the game by creating the signals and setting up the components and starts the game."
@@ -91,27 +97,23 @@
         pl-pos     (chan 1)     ;; paddle left position signal
         pr-pos     (chan 1)     ;; paddle right position signal
         game-state (chan 1)     ;; game state signal, the state of the game and the current score
-        init-vel   (let [sgn #(if (< % 0.5) -1 1)
-                          deg (+ 35 (* 20 (rand)))
-                          rad (deg->rad deg)]
-                      (map #(* ball-speed %) 
-                        [(* (sgn (rand)) (sin rad)) (* (sgn (rand)) (cos rad))]))]
+        init-vel   (initial-velocity)]
     (setup-components frames game-state pos vel pl-pos pr-pos)
 
     ;; start the game by setting the initial values of the signals
-    (put! pos init-pos)
+    (put! pos *init-pos*)
     (put! vel init-vel)
-    (put! pl-pos init-paddle-pos)
-    (put! pr-pos init-paddle-pos)
+    (put! pl-pos *init-paddle-pos*)
+    (put! pr-pos *init-paddle-pos*)
     (put! game-state [:moving 0])))
 
 (defn setup-components
-  "Multiplexes the signals and sets up the components by connecting them using the signals 
-   tapped from the multiplexers.
+  "Creates mult(iple)s of the signals and sets up the components by connecting them using 
+   the signals tapped from the mults.
    The signals are taken as parameters."
   [frames game-state pos vel pl-pos pr-pos]
   (let [ticks        (chan)             ;; ticks signal
-        ticks-m      (mult ticks)       ;; multiplexers for all signals
+        ticks-m      (mult ticks)       ;; mult(iple)s for all signals
         pos-m        (mult pos)
         vel-m        (mult vel)
         pl-pos-m     (mult pl-pos)
@@ -122,7 +124,7 @@
         ;; sustained at the ticks rate
         pl-pos-sust  (sustain (tap pl-pos-m) (tap ticks-m (chan (sliding-buffer 1000))))
         pr-pos-sust  (sustain (tap pr-pos-m) (tap ticks-m (chan (sliding-buffer 1000))))]
-    ;; set up the components
+    ;; set up the components by tapping into mults
     (ticker frames (tap game-state-m) ticks)
 
     (ball-positioner (tap ticks-m) (tap vel-m) (tap pos-m) pos)
@@ -145,9 +147,12 @@
     (go (loop []
           (let [[state _] (<! game-state)]
             (do (>! ticks (<! ticks-in))
-              (if (= :gameover state)
-                (stop-frames)
-                (recur))))))))
+              (if-not (= :gameover state)
+                (recur)
+                (stop-frames))))))))
+
+(defn next-pos [[x y] [vel-x vel-y] tick]
+  [(+ x (* vel-x tick)) (+ y (* vel-y tick))])
 
 (defn ball-positioner
   "Ball Positioner component.
@@ -170,34 +175,34 @@
       (let [pos (<! pos-in)]
         (>! pos-out
           (condp = (<! keys)
-            :up   (max (- pos paddle-step) 0)
-            :down (min (+ pos paddle-step) max-paddle-y)))))))
+            :up   (max (- pos *paddle-step*) 0)
+            :down (min (+ pos *paddle-step*) *max-paddle-y*)))))))
 
 (defn in-y-range? [y paddle-y]
-    (and (> y (- paddle-y padding)) (< y (+ paddle-y paddle-size padding))))
+    (and (> y (- paddle-y *padding*)) (< y (+ paddle-y *paddle-size* *padding*))))
 
 (defn detect-x-collision [x y lpaddle-y rpaddle-y]
   (cond
-    (< x ef-paddle-width)
+    (< x *ef-paddle-width*)
       (if (in-y-range? y lpaddle-y) :collision-left  :gameover)
-    (> x (- width ef-paddle-width))
+    (> x (- *width* *ef-paddle-width*))
       (if (in-y-range? y rpaddle-y) :collision-right :gameover)
     :else :moving))
 
 (defn detect-y-collision [y]
   (cond
-    (< y padding)            :collision-left
-    (> y (- height padding)) :collision-right
-    :else                    :moving))
+    (< y *padding*)              :collision-left
+    (> y (- *height* *padding*)) :collision-right
+    :else                        :moving))
 
-(defn collision-state? [state]
+(defn collision? [state]
   (or (= state :collision-left) (= state :collision-right)))
 
-(defn adjust-vel [state v]
+(defn adjust-vel [state vel]
   (condp = state
-    :collision-left  (abs v)
-    :collision-right (- (abs v))
-    :moving          v
+    :collision-left  (abs vel)
+    :collision-right (- (abs vel))
+    :moving          vel
     :gameover        0))
 
 (defn perturb [v] (* v (+ 1 (/ (- (rand) 0.5) 25))))
@@ -217,18 +222,18 @@
           [x y]           (<! pos)
           lpaddle-y       (<! pl-pos)
           rpaddle-y       (<! pr-pos)
-          [xn yn]         (next-pos [x y] [vel-x vel-y] tick)
           [_ score]       (<! game-state-in)
           
           ;; calculate next position and detect collision
+          [xn yn]         (next-pos [x y] [vel-x vel-y] tick)
           x-state         (detect-x-collision xn yn lpaddle-y rpaddle-y)
-          vel-xn          (adjust-vel x-state vel-x)
           y-state         (detect-y-collision yn)
+          x-collision     (collision? x-state)
+          y-collision     (collision? y-state)
+          
+          ;; calculate next velocity and game state
+          vel-xn          (adjust-vel x-state vel-x)
           vel-yn          (adjust-vel y-state vel-y)
-          x-collision     (collision-state? x-state)
-          y-collision     (collision-state? y-state)
-
-          ;; calculate next game state
           state-n         (cond
                             (= x-state :gameover)        :gameover
                             (or x-collision y-collision) :collision
@@ -261,6 +266,9 @@
                               :moving "Playing"
                               :collision "Playing"
                               :gameover "Game Over")]
+          (doto ball-el
+            (dom/set-attr! "cx" x)
+            (dom/set-attr! "cy" y))
           (when-not (= fps fps-p)
             (dom/set-text! fps-el fps))
           (when-not (= state state-p)
@@ -270,9 +278,6 @@
           (when (= state :gameover)
             (do (dom/set-text! state-el "press <space> to restart")
               (ev/listen-once! :keypress #(when (= (:keyCode %) 32) (start-game)))))
-          (doto ball-el
-            (dom/set-attr! "cx" x)
-            (dom/set-attr! "cy" y))
           (recur fps state-text score))))
   (go-loop
     (dom/set-attr! lpaddle-el "y" (<! pl-pos)))
