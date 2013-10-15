@@ -86,6 +86,9 @@
     (dom/set-attr! "r" *ball-radius*)
     (dom/set-attr! "cx" (first *center*))
     (dom/set-attr! "cy" (second *center*)))
+  (doto (dom/by-id "score")
+    (dom/set-attr! "x" (first *center*))
+    (dom/set-attr! "y" (second *center*)))
   (doseq [id ["lpaddle" "rpaddle"]]
     (doto (dom/by-id id)
       (dom/set-attr! "width" *paddle-width*)

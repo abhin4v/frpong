@@ -34,6 +34,12 @@ body {
 #canvas {
     border: 2px green solid;
 }
+
+#score {
+    font-size: 70px;
+    text-anchor: middle;
+    dominant-baseline: central;
+}
     </style>
 </head>
 <body>
@@ -49,13 +55,13 @@ body {
                 </span>
             </div>
             <svg id="canvas">
+                <text id="score">0</text>
                 <circle id="ball" />
                 <rect id="lpaddle" />
                 <rect id="rpaddle" />
             </svg>
             <div>
                 <div style="float: left">
-                    score <span id="score">0</span>
                     fps <span id="fps">0</span>
                 </div>
                 use W-S keys to move the left paddle and Up-Down arrow keys to move the right paddle
