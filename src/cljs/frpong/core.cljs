@@ -50,6 +50,7 @@
           (close! c))))
     c))
 
+;; Global settings
 (def *width*            (- (.-scrollWidth (.-body js/document)) 20))
 (def *height*           (- (.-scrollHeight (.-body js/document)) 125))
 (def *center*           [(/ *width* 2 ) (/ *height* 2)])
@@ -62,7 +63,7 @@
 (def *perturb-factor*   0.02)
 
 (def *paddle-width*     10)
-(def *paddle-step*      5)
+(def *paddle-step*      8)
 (def *max-paddle-y*     (- *height* *paddle-size*))
 (def *ef-paddle-width*  (+ *paddle-width* *padding*))
 (def *init-paddle-pos*  (/ (- *height* *paddle-size*) 2))
@@ -87,7 +88,10 @@
   (dom/set-attr! (dom/by-id "lpaddle") "x" 0)
   (dom/set-attr! (dom/by-id "rpaddle") "x" (- *width* *paddle-width*)))
 
-(defn initial-velocity []
+(defn initial-velocity
+  "Calculates a random initial ball velocity, randomly in any four quadrants, between
+   the limits of degrees specified by *init-vel-deg-lim*."
+  []
   (let [[l h] *init-vel-deg-lim*
         sgn   #(if (< % 0.5) -1 1)
         deg   (+ l (* (- h l) (rand)))
@@ -98,14 +102,14 @@
 (defn start-game
   "Sets up the game by creating the signals and setting up the components and starts the game."
   []
-  (let [frames     (frame-chan) ;; frames signal
-        keydowns   (event-chan :keydown)
-        keyups     (event-chan :keyup)
-        pos        (chan 1)     ;; ball position signal
-        vel        (chan 1)     ;; ball velocity signal
-        acc        (chan 1)
-        pd-pos     (chan 1)     ;; paddles position signal
-        game-state (chan 1)     ;; game state signal, the state of the game and the current score
+  (let [frames     (frame-chan)          ;; frames signal
+        keydowns   (event-chan :keydown) ;; keydowns signal
+        keyups     (event-chan :keyup)   ;; keyups signal
+        pos        (chan 1)              ;; ball position signal
+        vel        (chan 1)              ;; ball velocity signal
+        acc        (chan 1)              ;; ball acceleration signal
+        pd-pos     (chan 1)              ;; paddles position signal
+        game-state (chan 1)              ;; game state signal, the state of the game and the current score
         init-vel   (initial-velocity)]
     (setup-components frames keydowns keyups game-state pos vel acc pd-pos)
 
@@ -121,7 +125,7 @@
 (defn setup-components
   "Creates mult(iple)s of the signals and sets up the components by connecting them using 
    the signals tapped from the mults.
-   The signals are taken as parameters."
+   The signals and their stop functions are taken as parameters."
   [[frames stop-frames] [keydowns stop-keydowns] [keyups stop-keyups]
    game-state pos vel acc pd-pos]
   (let [ticks        (chan)             ;; ticks signal
@@ -165,7 +169,10 @@
                 (recur)
                 (stop-game))))))))
 
-(defn gravity-acc [[x y]]
+(defn gravity-acc
+  "Calculates acceleration due to gravitation for the ball caused by a unit mass placed at the
+   center of the board."
+  [[x y]]
   (let [[cx cy]  *center*
         x-dist   (- cx x)
         y-dist   (- cy y)
@@ -199,8 +206,8 @@
 
 (defn paddle-positioner
   "Paddle Positioner component.
-   Captures the keydown signal for the provides keycodes and calculates the next paddle
-   position using the current paddle position (from the `pos-in` signal) and keydown signal
+   Captures the keys signal for the provides keycodes and calculates the next paddle
+   positions using the current paddle positions (from the `pos-in` signal) and keys signal
    and outputs it to the `pos-out` signal."
   [keys pos-in pos-out]
   (go-loop
@@ -248,8 +255,8 @@
    and outputs the next ball velocity and next game state to the `vel-out` and `game-state` 
    signals respectively.
    Reads the current tick, ball position, ball velocity, ball acceleration, left and right paddle 
-   positions and game state from the `ticks`, `pos`, `vel-in`, `acc`, `pd-pos` 
-   and `game-state` signals respectively."
+   positions and game state from the `ticks`, `pos`, `vel-in`, `acc`, `pd-pos` and `game-state` 
+   signals respectively."
 
   (go-loop
     (let [;; get all current values
@@ -293,7 +300,7 @@
         score-el   (dom/by-id "score")
         lpaddle-el (dom/by-id "lpaddle")
         rpaddle-el (dom/by-id "rpaddle")
-          fps-el     (dom/by-id "fps")]
+        fps-el     (dom/by-id "fps")]
     (go (loop [fps-p nil state-p nil score-p nil]
           (let [fps                   (int (/ 1000 (<! ticks)))
                 [x y]                 (<! pos)
