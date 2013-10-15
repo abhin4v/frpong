@@ -22,6 +22,11 @@ body {
     fill: orange;
 }
 
+#mass {
+    opacity: 0.5;
+    fill: khaki;
+}
+
 #rpaddle, #lpaddle {
     fill: rgb(108, 182, 108);
 }
@@ -48,13 +53,14 @@ body {
             <h2 id="title">Gravity Pong!</h2>
             <div>
                 <span style="float: left; vertical-align: top;">Gravity 
-                    <input id="gravity" type="range" min="1" max="10" value="1" step="1" />
+                    0 <input id="gravity" type="range" min="0" max="10" value="1" step="1" /> 10
                 </span>
                 <span style="float: right; font-size: smaller">
                     <span id="state">press &lt;space&gt; to start</span>
                 </span>
             </div>
             <svg id="canvas">
+                <circle id="mass" />
                 <text id="score">0</text>
                 <circle id="ball" />
                 <rect id="lpaddle" />

@@ -62,18 +62,24 @@
 (def *init-vel-deg-lim* [35 55])
 (def *perturb-factor*   0.02)
 
+(def *init-mass-radius* 0)
+
 (def *paddle-width*     10)
 (def *paddle-step*      8)
 (def *max-paddle-y*     (- *height* *paddle-size*))
 (def *ef-paddle-width*  (+ *paddle-width* *padding*))
 (def *init-paddle-pos*  (/ (- *height* *paddle-size*) 2))
 
-(def *gravity*          (atom 0.01))
+(def *gravity*          (atom 0.005))
+
+(defn mass-radius []
+  (+ *init-mass-radius* (* (deref *gravity*) 1000)))
 
 ;; listen for changes in the gravity input slider and set the atom value accordingly
 (ev/listen! (dom/by-id "gravity") :change 
-  #(let [val (* (int (dom/value (dom/by-id "gravity"))) 0.005)]
+  #(let [val (* (int (dom/value (dom/by-id "gravity"))) 0.01)]
       (reset! *gravity* val)
+      (dom/set-attr! (dom/by-id "mass") "r" (mass-radius))
       (.blur (dom/by-id "gravity"))))
 
 (defn layout-game
@@ -84,6 +90,10 @@
       (dom/set-style! "height" (str *height* "px")))
   (doto (dom/by-id "ball")
     (dom/set-attr! "r" *ball-radius*)
+    (dom/set-attr! "cx" (first *center*))
+    (dom/set-attr! "cy" (second *center*)))
+  (doto (dom/by-id "mass")
+    (dom/set-attr! "r" (mass-radius))
     (dom/set-attr! "cx" (first *center*))
     (dom/set-attr! "cy" (second *center*)))
   (doto (dom/by-id "score")
