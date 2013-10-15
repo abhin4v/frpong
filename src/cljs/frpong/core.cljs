@@ -311,9 +311,11 @@
         score-el   (dom/by-id "score")
         lpaddle-el (dom/by-id "lpaddle")
         rpaddle-el (dom/by-id "rpaddle")
-        fps-el     (dom/by-id "fps")]
+        fps-el     (dom/by-id "fps")
+        title-el   (dom/by-id "title")]
     (dom/set-style! ball-el "fill" "orange")
     (dom/set-text! state-el "")
+    (dom/set-text! title-el "Gravity Pong!")
     (go (loop [fps-p nil score-p nil]
           (let [fps                   (int (/ 1000 (<! ticks)))
                 [x y]                 (<! pos)
@@ -331,6 +333,7 @@
             (when (= state :gameover)
               (do (dom/set-style! ball-el "fill" "red")
                 (dom/set-text! state-el "press <space> to restart")
+                (dom/set-text! title-el "GAME OVER")
                 (start-on-space)))
             (recur fps score))))))
 
