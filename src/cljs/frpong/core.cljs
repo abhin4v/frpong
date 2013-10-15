@@ -87,7 +87,7 @@
     (go-loop
       (let [k (:keyCode (<! keydowns))]
         (when (contains? actions k)
-          (do (swap! *gravity* #(max 0 (min 10 ((actions k) %))))
+          (do (swap! *gravity* #(max 0 (min 0.1 ((actions k) %))))
             (dom/set-attr! (dom/by-id "mass") "r" (mass-radius))))))))
 
 (defn layout-game
@@ -356,5 +356,4 @@
 (defn ^:export frpong []
   (setup-gravity-control)
   (layout-game)
-  (dom/set-text! (dom/by-id "msg") "press <space> to start")
   (start-on-space))
