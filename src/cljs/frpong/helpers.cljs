@@ -128,13 +128,13 @@
 
 (defn event-chan
   ([event-type]
-    (let [c (chan)]
-      (ev/listen! ev/root-element event-type #(put! c %))
-      [c #(do (ev/unlisten! ev/root-element event-type) (close! c))]))
+    (let [c      (chan)
+          [lkey] (ev/listen! event-type #(put! c %))]
+      [c #(do (ev/unlisten-by-key! lkey) (close! c))]))
   ([node event-type]
-    (let [c (chan)]
-      (ev/listen! node event-type #(put! c %))
-      [c #(do (ev/unlisten! node event-type) (close! c))])))
+    (let [c (chan)
+          [lkey] (ev/listen! node event-type #(put! c %))]
+      [c #(do (ev/unlisten-by-key! lkey) (close! c))])))
 
 (defn key-chan [keydowns keyups sampler keycodes]
   (let [c   (chan)

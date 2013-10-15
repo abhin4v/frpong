@@ -50,6 +50,11 @@
           (close! c))))
     c))
 
+(defn flash [el msgs millis]
+  (when (not-empty msgs)
+    (do (dom/set-text! el (first msgs))
+      (.setTimeout js/window #(flash el (rest msgs) millis) millis))))
+
 ;; Global settings
 (def *width*            (- (.-scrollWidth (.-body js/document)) 20))
 (def *height*           (- (.-scrollHeight (.-body js/document)) 130))
@@ -60,7 +65,7 @@
 (def *ball-radius*      8)
 (def *ball-speed*       0.6)
 (def *init-vel-deg-lim* [35 55])
-(def *perturb-factor*   0.02)
+(def *perturb-factor*   0.05)
 
 (def *init-mass-radius* 0)
 
@@ -71,16 +76,19 @@
 (def *init-paddle-pos*  (/ (- *height* *paddle-size*) 2))
 
 (def *gravity*          (atom 0.005))
+(def *gravity-step*     0.005)
 
 (defn mass-radius []
   (+ *init-mass-radius* (* (deref *gravity*) 1000)))
 
-;; listen for changes in the gravity input slider and set the atom value accordingly
-(ev/listen! (dom/by-id "gravity") :change 
-  #(let [val (* (int (dom/value (dom/by-id "gravity"))) 0.01)]
-      (reset! *gravity* val)
-      (dom/set-attr! (dom/by-id "mass") "r" (mass-radius))
-      (.blur (dom/by-id "gravity"))))
+(defn setup-gravity-control []
+  (let [keydowns   (first (event-chan :keydown))
+        actions    { 37 #(- % *gravity-step*) 39 #(+ % *gravity-step*) }]
+    (go-loop
+      (let [k (:keyCode (<! keydowns))]
+        (when (contains? actions k)
+          (do (swap! *gravity* #(max 0 (min 10 ((actions k) %))))
+            (dom/set-attr! (dom/by-id "mass") "r" (mass-radius))))))))
 
 (defn layout-game
   "Lays out the game screen."
@@ -268,7 +276,7 @@
     :moving          vel
     :gameover        0))
 
-(defn perturb [v] (* v (+ 1 (/ (- (rand) 0.5) (/ 0.5 *perturb-factor*)))))
+(defn perturb [v] (* v (+ 1 (* (rand) *perturb-factor*))))
 
 (defn collision-detector [ticks pos vel-in acc pd-pos game-state-in game-state vel-out]
   "Collision Detector component.
@@ -317,15 +325,13 @@
    Reads the current values from the signals supplied as parameters."
   [ticks game-state pos pd-pos]
   (let [ball-el    (dom/by-id "ball")
-        state-el   (dom/by-id "state")
         score-el   (dom/by-id "score")
         lpaddle-el (dom/by-id "lpaddle")
         rpaddle-el (dom/by-id "rpaddle")
         fps-el     (dom/by-id "fps")
-        title-el   (dom/by-id "title")]
+        msg-el     (dom/by-id "msg")]
     (dom/set-style! ball-el "fill" "orange")
-    (dom/set-text! state-el "")
-    (dom/set-text! title-el "Gravity Pong!")
+    (dom/set-text! msg-el "")
     (go (loop [fps-p nil score-p nil]
           (let [fps                   (int (/ 1000 (<! ticks)))
                 [x y]                 (<! pos)
@@ -342,12 +348,13 @@
               (dom/set-text! score-el score))
             (when (= state :gameover)
               (do (dom/set-style! ball-el "fill" "red")
-                (dom/set-text! state-el "press <space> to restart")
-                (dom/set-text! title-el "GAME OVER")
+                (dom/set-html! msg-el "<span class='imp'>GAME OVER</span><br>press &lt;space&gt; to restart")
                 (start-on-space)))
             (recur fps score))))))
 
 ;; Everything is ready now. Layout the game and start it on pressing <space>!
 (defn ^:export frpong []
+  (setup-gravity-control)
   (layout-game)
+  (dom/set-text! (dom/by-id "msg") "press <space> to start")
   (start-on-space))

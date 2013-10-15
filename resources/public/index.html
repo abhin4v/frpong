@@ -13,9 +13,6 @@ body {
 
 #title {
     margin: 0px;
-    position: absolute;
-    width: 98%;
-    z-index: -1;
 }
 
 #ball {
@@ -38,6 +35,7 @@ body {
 
 #canvas {
     border: 2px green solid;
+    margin-top: 3px;
 }
 
 #score {
@@ -45,20 +43,25 @@ body {
     text-anchor: middle;
     dominant-baseline: central;
 }
+
+#msg {
+    position: absolute;
+    width: 98%;
+    top: 40px;
+    font-size: 1.2em;
+}
+
+#msg .imp {
+    font-size: xx-large;
+    font-weight: bold;
+}
     </style>
 </head>
 <body>
     <center>
         <div id="screen">
             <h2 id="title">Gravity Pong!</h2>
-            <div>
-                <span style="float: left; vertical-align: top;">Gravity 
-                    0 <input id="gravity" type="range" min="0" max="10" value="1" step="1" /> 10
-                </span>
-                <span style="float: right; font-size: smaller">
-                    <span id="state">press &lt;space&gt; to start</span>
-                </span>
-            </div>
+            <div id="msg"></div>
             <svg id="canvas">
                 <circle id="mass" />
                 <text id="score">0</text>
@@ -70,7 +73,7 @@ body {
                 <div style="float: left">
                     fps <span id="fps">0</span>
                 </div>
-                use W-S keys to move the left paddle and Up-Down arrow keys to move the right paddle
+                use W-S and Up-Down keys to move the paddles / use Left-Right keys to change gravity
                 <div style="float: right">
                     <a target="_blank" href="https://github.com/abhin4v/frpong">Source</a>
                 </div>
