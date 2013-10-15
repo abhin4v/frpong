@@ -168,6 +168,16 @@
     (.requestAnimationFrame js/window step)
     [fc stop-fn]))
 
+(defn tick-chan [frames]
+  (let [c (chan)]
+    (go
+      (loop [prev (<! frames)]
+        (if-let [t (<! frames)]
+          (do (when (< t (* 10 prev)) (>! c t))
+            (recur t))
+          (close! c))))
+    c))
+
 (defn counting-chan [source]
   (let [c (chan)]
     (go

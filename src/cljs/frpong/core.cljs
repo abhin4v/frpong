@@ -1,5 +1,5 @@
 (ns frpong.core
-  (:require [frpong.helpers :refer (mult tap map-chan diff-chan key-chan frame-chan event-chan sustain)]
+  (:require [frpong.helpers :refer (mult tap map-chan diff-chan key-chan frame-chan tick-chan event-chan)]
             [cljs.core.async :refer [<! >! chan put! close! sliding-buffer]]
             [domina :as dom :refer [log]]
             [domina.events :as ev])
@@ -40,21 +40,6 @@
 (defn cos [x] (.cos js/Math x))
 (defn sin [x] (.sin js/Math x))
 
-(defn tick-chan [frames]
-  (let [c (chan)]
-    (go
-      (loop [prev (<! frames)]
-        (if-let [t (<! frames)]
-          (do (when (< t (* 10 prev)) (>! c t))
-            (recur t))
-          (close! c))))
-    c))
-
-(defn flash [el msgs millis]
-  (when (not-empty msgs)
-    (do (dom/set-text! el (first msgs))
-      (.setTimeout js/window #(flash el (rest msgs) millis) millis))))
-
 ;; Global settings
 (def *width*            (- (.-scrollWidth (.-body js/document)) 20))
 (def *height*           (- (.-scrollHeight (.-body js/document)) 130))
@@ -81,14 +66,17 @@
 (defn mass-radius []
   (+ *init-mass-radius* (* (deref *gravity*) 1000)))
 
-(defn setup-gravity-control []
+(defn setup-gravity-controls
+  "Sets up keyboard controls for changing gravity."
+  []
   (let [keydowns   (first (event-chan :keydown))
-        actions    { 37 #(- % *gravity-step*) 39 #(+ % *gravity-step*) }]
+        actions    { 37 #(- % *gravity-step*) 39 #(+ % *gravity-step*) }
+        mass-el    (dom/by-id "mass")]
     (go-loop
       (let [k (:keyCode (<! keydowns))]
         (when (contains? actions k)
           (do (swap! *gravity* #(max 0 (min 0.1 ((actions k) %))))
-            (dom/set-attr! (dom/by-id "mass") "r" (mass-radius))))))))
+            (dom/set-attr! mass-el "r" (mass-radius))))))))
 
 (defn layout-game
   "Lays out the game screen."
@@ -123,7 +111,7 @@
         sgn   #(if (< % 0.5) -1 1)
         deg   (+ l (* (- h l) (rand)))
         rad   (deg->rad deg)]
-    (map #(* *ball-speed* %) 
+    (map #(* *ball-speed* %)
       [(* (sgn (rand)) (sin rad)) (* (sgn (rand)) (cos rad))])))
 
 (defn start-game
@@ -138,7 +126,6 @@
         pd-pos     (chan 1)              ;; paddles position signal
         game-state (chan 1)              ;; game state signal, the state of the game and the current score
         init-vel   (initial-velocity)]
-    (log "Starting game")
     (setup-components frames keydowns keyups game-state pos vel acc pd-pos)
 
     ;; start the game by setting the initial values of the signals
@@ -151,7 +138,7 @@
   (ev/listen-once! :keypress #(if (= (:keyCode %) 32) (start-game) (start-on-space))))
 
 (defn setup-components
-  "Creates mult(iple)s of the signals and sets up the components by connecting them using 
+  "Creates mult(iple)s of the signals and sets up the components by connecting them using
    the signals tapped from the mults.
    The signals and their stop functions are taken as parameters."
   [[frames stop-frames] [keydowns stop-keydowns] [keyups stop-keyups]
@@ -174,7 +161,7 @@
     (gravitation (tap pos-m) acc)
     (ball-positioner (tap ticks-m) (tap pos-m) (tap vel-m) (tap acc-m) pos)
     (paddle-positioner
-      (key-chan (tap keydowns-m) (tap keyups-m) (tap ticks-m) {83 :s 87 :w 38 :up 40 :down}) 
+      (key-chan (tap keydowns-m) (tap keyups-m) (tap ticks-m) {83 :s 87 :w 38 :up 40 :down})
       (tap pd-pos-m) pd-pos)
 
     (collision-detector (tap ticks-m) (tap pos-m) (tap vel-m) (tap acc-m)
@@ -182,10 +169,10 @@
 
     (renderer (tap ticks-m) (tap game-state-m) (tap pos-m) (tap pd-pos-m))))
 
-(defn ticker 
+(defn ticker
   "Ticker component.
    Converts `frames` signal to ticks and outputs them to the `ticks` signal
-   as long as the `game-state` signal is not :gameover. Once the `game-state` signal is 
+   as long as the `game-state` signal is not :gameover. Once the `game-state` signal is
    :gameover, stops the game by calling the `stop-game` function.
    Each tick is the number of milliseconds since the last tick was generated."
   [frames stop-game game-state ticks]
@@ -198,7 +185,7 @@
                 (stop-game))))))))
 
 (defn gravity-acc
-  "Calculates acceleration due to gravitation for the ball caused by a unit mass placed at the
+  "Calculates acceleration due to gravitation for the ball caused by the mass placed at the
    center of the board."
   [[x y]]
   (let [grav     (deref *gravity*)
@@ -281,10 +268,10 @@
 (defn collision-detector [ticks pos vel-in acc pd-pos game-state-in game-state vel-out]
   "Collision Detector component.
    Detects the collision of the ball with the walls and the paddles and accordingly calculates
-   and outputs the next ball velocity and next game state to the `vel-out` and `game-state` 
+   and outputs the next ball velocity and next game state to the `vel-out` and `game-state`
    signals respectively.
-   Reads the current tick, ball position, ball velocity, ball acceleration, left and right paddle 
-   positions and game state from the `ticks`, `pos`, `vel-in`, `acc`, `pd-pos` and `game-state` 
+   Reads the current tick, ball position, ball velocity, ball acceleration, left and right paddle
+   positions and game state from the `ticks`, `pos`, `vel-in`, `acc`, `pd-pos` and `game-state`
    signals respectively."
 
   (go-loop
@@ -295,14 +282,14 @@
           [gx gy]               (<! acc)
           [lpaddle-y rpaddle-y] (<! pd-pos)
           [_ score]             (<! game-state-in)
-          
+
           ;; calculate next position and detect collision
           [xn yn]               (next-pos [x y] [vel-x vel-y] [gx gy] tick)
           x-state               (detect-x-collision xn yn lpaddle-y rpaddle-y)
           y-state               (detect-y-collision yn)
           x-collision           (collision? x-state)
           y-collision           (collision? y-state)
-          
+
           ;; calculate next velocity and game state
           vel-xn                (min *ball-speed* (+ (adjust-vel x-state vel-x) (* gx tick)))
           vel-yn                (min *ball-speed* (+ (adjust-vel y-state vel-y) (* gy tick)))
@@ -354,6 +341,6 @@
 
 ;; Everything is ready now. Layout the game and start it on pressing <space>!
 (defn ^:export frpong []
-  (setup-gravity-control)
+  (setup-gravity-controls)
   (layout-game)
   (start-on-space))
