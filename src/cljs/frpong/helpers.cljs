@@ -129,15 +129,22 @@
 (defn event-chan [event-type]
   (let [c (chan)]
     (ev/listen! event-type #(put! c %))
-    c))
+    [c #(do (ev/unlisten! event-type) (close! c))]))
 
-(defn key-chan [keycodes]
-  (let [source (event-chan :keydown)
-        c (chan)]
-    (go-loop
-      (let [kc (:keyCode (<! source))]
-        (when (contains? keycodes kc)
-          (>! c (keycodes kc)))))
+(defn key-chan [keydowns keyups sampler keycodes]
+  (let [c (chan)
+        ops {keydowns conj
+             keyups   disj}]
+    (go (loop [keys #{}]
+      (let [[v ch] (alts! [keydowns keyups sampler] :priority true)]
+        (if-not (nil? v)
+          (if (or (= ch keydowns) (= ch keyups))
+            (let [k (:keyCode v)]
+              (if (contains? keycodes k)
+                (recur ((ops ch) keys (keycodes k)))
+                (recur keys)))
+            (do (>! c keys) (recur keys)))
+          (close! c)))))
     c))
 
 (defn frame-chan []
