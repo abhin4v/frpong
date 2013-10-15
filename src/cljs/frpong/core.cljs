@@ -1,5 +1,5 @@
 (ns frpong.core
-  (:require [frpong.helpers :refer (mult tap diff-chan key-chan frame-chan event-chan)]
+  (:require [frpong.helpers :refer (mult tap map-chan diff-chan key-chan frame-chan event-chan sustain)]
             [cljs.core.async :refer [<! >! chan put! close! sliding-buffer]]
             [domina :as dom :refer [log]]
             [domina.events :as ev])
@@ -52,13 +52,13 @@
 
 ;; Global settings
 (def *width*            (- (.-scrollWidth (.-body js/document)) 20))
-(def *height*           (- (.-scrollHeight (.-body js/document)) 125))
+(def *height*           (- (.-scrollHeight (.-body js/document)) 130))
 (def *center*           [(/ *width* 2 ) (/ *height* 2)])
 (def *padding*          5)
 (def *paddle-size*      100)
 
 (def *ball-radius*      8)
-(def *ball-speed*       0.5)
+(def *ball-speed*       0.6)
 (def *init-vel-deg-lim* [35 55])
 (def *perturb-factor*   0.02)
 
@@ -68,7 +68,13 @@
 (def *ef-paddle-width*  (+ *paddle-width* *padding*))
 (def *init-paddle-pos*  (/ (- *height* *paddle-size*) 2))
 
-(def *G*                0.01)
+(def *gravity*          (atom 0.01))
+
+;; listen for changes in the gravity input slider and set the atom value accordingly
+(ev/listen! (dom/by-id "gravity") :change 
+  #(let [val (* (int (dom/value (dom/by-id "gravity"))) 0.005)]
+      (reset! *gravity* val)
+      (.blur (dom/by-id "gravity"))))
 
 (defn layout-game
   "Lays out the game screen."
@@ -111,6 +117,7 @@
         pd-pos     (chan 1)              ;; paddles position signal
         game-state (chan 1)              ;; game state signal, the state of the game and the current score
         init-vel   (initial-velocity)]
+    (log "Starting game")
     (setup-components frames keydowns keyups game-state pos vel acc pd-pos)
 
     ;; start the game by setting the initial values of the signals
@@ -173,13 +180,14 @@
   "Calculates acceleration due to gravitation for the ball caused by a unit mass placed at the
    center of the board."
   [[x y]]
-  (let [[cx cy]  *center*
+  (let [grav     (deref *gravity*)
+        [cx cy]  *center*
         x-dist   (- cx x)
         y-dist   (- cy y)
         distance (sqrt (+ (sq x-dist) (sq y-dist)))
         bearing  [(/ x-dist distance) (/ y-dist distance)]]
     (if-not (= distance 0)
-      (map #(* *G* % (/ 1 distance)) bearing)
+      (map #(* grav % (/ 1 distance)) bearing)
       [0 0])))
 
 (defn gravitation
@@ -301,15 +309,13 @@
         lpaddle-el (dom/by-id "lpaddle")
         rpaddle-el (dom/by-id "rpaddle")
         fps-el     (dom/by-id "fps")]
-    (go (loop [fps-p nil state-p nil score-p nil]
+    (dom/set-style! ball-el "fill" "orange")
+    (dom/set-text! state-el "")
+    (go (loop [fps-p nil score-p nil]
           (let [fps                   (int (/ 1000 (<! ticks)))
                 [x y]                 (<! pos)
                 [lpaddle-y rpaddle-y] (<! pd-pos)
-                [state score]         (<! game-state)
-                state-text            (condp = state
-                                        :moving "Playing"
-                                        :collision "Playing"
-                                        :gameover "Game Over")]
+                [state score]         (<! game-state)]
             (doto ball-el
               (dom/set-attr! "cx" x)
               (dom/set-attr! "cy" y))
@@ -317,14 +323,13 @@
             (dom/set-attr! rpaddle-el "y" rpaddle-y)
             (when-not (= fps fps-p)
               (dom/set-text! fps-el fps))
-            (when-not (= state state-p)
-              (dom/set-text! state-el state-text))
             (when-not (= score score-p)
               (dom/set-text! score-el score))
             (when (= state :gameover)
-              (do (dom/set-text! state-el "press <space> to restart")
+              (do (dom/set-style! ball-el "fill" "red")
+                (dom/set-text! state-el "press <space> to restart")
                 (start-on-space)))
-            (recur fps state-text score))))))
+            (recur fps score))))))
 
 ;; Everything is ready now. Layout the game and start it on pressing <space>!
 (defn ^:export frpong []

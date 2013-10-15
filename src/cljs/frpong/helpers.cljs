@@ -126,15 +126,20 @@
           (recur v))))
     c))
 
-(defn event-chan [event-type]
-  (let [c (chan)]
-    (ev/listen! event-type #(put! c %))
-    [c #(do (ev/unlisten! event-type) (close! c))]))
+(defn event-chan
+  ([event-type]
+    (let [c (chan)]
+      (ev/listen! ev/root-element event-type #(put! c %))
+      [c #(do (ev/unlisten! ev/root-element event-type) (close! c))]))
+  ([node event-type]
+    (let [c (chan)]
+      (ev/listen! node event-type #(put! c %))
+      [c #(do (ev/unlisten! node event-type) (close! c))])))
 
 (defn key-chan [keydowns keyups sampler keycodes]
-  (let [c (chan)
-        ops {keydowns conj
-             keyups   disj}]
+  (let [c   (chan)
+        ops { keydowns conj
+              keyups   disj }]
     (go (loop [keys #{}]
       (let [[v ch] (alts! [keydowns keyups sampler] :priority true)]
         (if-not (nil? v)
