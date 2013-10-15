@@ -98,7 +98,7 @@
     (dom/set-attr! "cy" (second *center*)))
   (doto (dom/by-id "score")
     (dom/set-attr! "x" (first *center*))
-    (dom/set-attr! "y" (second *center*)))
+    (dom/set-attr! "y" (- *height* 50)))
   (doseq [id ["lpaddle" "rpaddle"]]
     (doto (dom/by-id id)
       (dom/set-attr! "width" *paddle-width*)
