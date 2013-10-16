@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Gravity Pong: Functional Reactive Programming in Clojure using core.async</title>
+    <!--[if lt IE 9]>
+    <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <style type="text/css">
+body {
+    font-family: monospace;
+}
+
+#title {
+    margin: 0px;
+}
+
+#ball {
+    fill: orange;
+}
+
+#mass {
+    opacity: 0.5;
+    fill: khaki;
+}
+
+#rpaddle, #lpaddle {
+    fill: rgb(108, 182, 108);
+}
+
+#state {
+    font-size: 1.5em;
+    text-align: center;
+}
+
+#canvas {
+    border: 2px green solid;
+    margin-top: 3px;
+}
+
+#score {
+    font-size: 70px;
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
+#msg {
+    position: absolute;
+    width: 98%;
+    top: 40px;
+    font-size: 1.2em;
+}
+
+#msg .imp {
+    font-size: xx-large;
+    font-weight: bold;
+}
+    </style>
+</head>
+<body>
+    <center>
+        <div id="screen">
+            <h2 id="title">Gravity Pong!</h2>
+            <div id="msg">press &lt;space&gt; to start</div>
+            <svg id="canvas">
+                <circle id="mass" />
+                <text id="score">0</text>
+                <circle id="ball" />
+                <rect id="lpaddle" />
+                <rect id="rpaddle" />
+            </svg>
+            <div>
+                <div style="float: left">
+                    fps <span id="fps">0</span>
+                </div>
+                use W-S and Up-Down keys to move the paddles / use Left-Right keys to change gravity
+                <div style="float: right">
+                    <a target="_blank" href="http://github.com/abhin4v/frpong">github</a>
+                </div>
+            </div>
+        </div>
+    </center>
+    
+    <!-- pointing to cljsbuild generated js file -->
+    <script src="js/frpong.js"></script>
+    <script type="text/javascript">frpong.core.frpong()</script>
+</body>
+</html>
