@@ -6,28 +6,33 @@
   (:require-macros [cljs.core.async.macros :as m :refer [go]]
                    [frpong.core :refer (go-loop)]))
 ;;
-;;                                Signal Diagram
+;;                                       Signal Diagram
 ;;
-;;                                                     +---------------------+
-;;                                                     |   +-------------+   |
-;;                                                     |   |             |   |
-;;                                                     v   v             |   |
-;;                                                 +----------+ vel-chan |   |
-;;                                             +-->|c-detector+----------+   |
-;;                                             |   +----------+          |   |
-;;                                             |       +-----------------+   |
-;;                                             |       |   +-----------------+
-;;                                             |       |   |                 |
-;;                                             |       v   v                 |
-;;  +---------+ frame-chan  +------+ tick-chan |   +----------+   pos-chan   |
-;;  |frame-gen+------------>|ticker+-----------+-->|positioner+--------------+
-;;  +---------+             +------+               +----------+              |
-;;                                                     +---------------------+
-;;                                                     |
-;;                                                     v
-;;                                                 +----------+
-;;                                                 | renderer |
-;;                                                 +----------+
+;;                                             +-d-----------+--------------------------+
+;;                                             v             |                          |
+;;        keyboard +-e-> sampler +---k---> paddle-postnr +-d-+   +-> gravitation +--+   |
+;;                         ^                                 |   p                  a   |
+;;                         t                                 |   |                  |   |
+;;                         |                                 |   |                  |   |
+;;                         +-------+          +-p----------+-|---+                  |   d
+;;                                 |          |  +-a-------|-|------+---------------+   |
+;;                                 |          v  v         | |      |                   v
+;;         browser +-f--> ticker +-+--t--> ball-postnr +-p-+-|------|------------p-> renderer
+;;                           ^     |             ^         | |      |                  ^  ^
+;;  Signals                  |     |       +-----|---------+ |      |                  |  |
+;;  -------                  s     |       |     l     +--d--+      |                  s  t
+;;  e: keyboard events       |     |       |   +-+-----|-------+    |                  |  |
+;;  k: keydowns              |     |       p   l   +-a-|-------|----+                  |  |
+;;  f: frames                |     |       v   v   v   v  +-l--+                       |  |
+;;  t: ticker                |     +---t-> collision-detr                              |  |
+;;  p: ball position         |     |             ^        +-s--+-----------------------+  |
+;;  l: ball velocity         |     |             s             |                          |
+;;  a: ball acceleration     +-----|-------------+-------------+                          |
+;;  d: paddle positions            |                                                      |
+;;  s: game state                  +------------------------------------------------------+
+;;
+;;  All signals except the signal e are at the rate of the signal f. The signal e is at the rate 
+;;  at which the keyboard issues events.
 
 (defn abs [x] (.abs js/Math x))
 (defn sqrt [x] (.sqrt js/Math x))
