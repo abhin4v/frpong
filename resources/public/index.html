@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Gravity Pong: Functional Reactive Programming in Clojure using core.async</title>
+    <title>Gravity Pong: Flow Based Programming in Clojure using core.async</title>
     <!--[if lt IE 9]>
     <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
@@ -13,6 +13,8 @@ body {
 
 #title {
     margin: 0px;
+    width: 98%;
+    position: absolute;
 }
 
 #ball {
@@ -35,7 +37,7 @@ body {
 
 #canvas {
     border: 2px green solid;
-    margin-top: 3px;
+    margin-top: 10px;
 }
 
 #score {
@@ -61,6 +63,9 @@ body {
     <center>
         <div id="screen">
             <h2 id="title">Gravity Pong!</h2>
+            <div style="float: right">
+                <a target="_blank" href="http://github.com/abhin4v/frpong">github</a>
+            </div>
             <div id="msg">press &lt;space&gt; to start</div>
             <svg id="canvas">
                 <circle id="mass" />
@@ -74,9 +79,7 @@ body {
                     fps <span id="fps">0</span>
                 </div>
                 use W-S and Up-Down keys to move the paddles / use Left-Right keys to change gravity
-                <div style="float: right">
-                    <a target="_blank" href="http://github.com/abhin4v/frpong">github</a>
-                </div>
+                <div style="float: right; font-size: smaller">Works only on Google Chrome</div>
             </div>
         </div>
     </center>
