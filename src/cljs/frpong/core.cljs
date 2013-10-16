@@ -2,9 +2,17 @@
   (:require [frpong.signals :refer (signal keyboard ticks dom-events mult tap)]
             [domina :as dom :refer [log]]
             [domina.events :as ev])
-  (:require-macros [cljs.core.async.macros :as m :refer [go]]
-                   [frpong.core :refer (go-loop rd wt)]))
-;;
+  (:require-macros [frpong.core :refer (go go-loop rd wt)]))
+
+;; > `signal` creates a new signal
+;; > `keyboard`, `ticks` and `dom-events` create signals for keydown events, browser animation ticks and 
+;; JS DOM events repectively
+;; > `mult` creates a mult(iple) of a signal which can then be tapped using `tap` to create a copy of the
+;; original signal
+;; > `rd` reads the current value of a signal
+;; > `wt` sets the current value of a signal to the provided value
+;; > `go` and `go-loop` start and run a component
+
 ;;                                       Signal Diagram
 ;;
 ;;                                                +-d-----------+--------------------------+
@@ -30,8 +38,9 @@
 ;;  d: paddle positions               |                                                      |
 ;;  s: game state                     +------------------------------------------------------+
 ;;
-;;  All signals except the signal e are at the rate of the signal f. The signal e is at the rate 
-;;  at which the keyboard issues events.
+;;  All signals except the signal e are at the rate of the signal b. The signal e is at the rate 
+;;  at which the keyboard issues events. The signal b is at the rate at which the browser supplies 
+;;  animation frames.
 
 (defn abs [x] (.abs js/Math x))
 (defn sqrt [x] (.sqrt js/Math x))
