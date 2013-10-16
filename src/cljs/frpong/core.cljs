@@ -1,35 +1,34 @@
 (ns frpong.core
-  (:require [frpong.helpers :refer (mult tap map-chan diff-chan key-chan frame-chan tick-chan event-chan)]
-            [cljs.core.async :refer [<! >! chan put! close! sliding-buffer]]
+  (:require [frpong.signals :refer (signal keyboard ticks dom-events mult tap)]
             [domina :as dom :refer [log]]
             [domina.events :as ev])
   (:require-macros [cljs.core.async.macros :as m :refer [go]]
-                   [frpong.core :refer (go-loop)]))
+                   [frpong.core :refer (go-loop rd wt)]))
 ;;
 ;;                                       Signal Diagram
 ;;
-;;                                             +-d-----------+--------------------------+
-;;                                             v             |                          |
-;;        keyboard +-e-> sampler +---k---> paddle-postnr +-d-+   +-> gravitation +--+   |
-;;                         ^                                 |   p                  a   |
-;;                         t                                 |   |                  |   |
-;;                         |                                 |   |                  |   |
-;;                         +-------+          +-p----------+-|---+                  |   d
-;;                                 |          |  +-a-------|-|------+---------------+   |
-;;                                 |          v  v         | |      |                   v
-;;         browser +-f--> ticker +-+--t--> ball-postnr +-p-+-|------|------------p-> renderer
-;;                           ^     |             ^         | |      |                  ^  ^
-;;  Signals                  |     |       +-----|---------+ |      |                  |  |
-;;  -------                  s     |       |     l     +--d--+      |                  s  t
-;;  e: keyboard events       |     |       |   +-+-----|-------+    |                  |  |
-;;  k: keydowns              |     |       p   l   +-a-|-------|----+                  |  |
-;;  f: frames                |     |       v   v   v   v  +-l--+                       |  |
-;;  t: ticker                |     +---t-> collision-detr                              |  |
-;;  p: ball position         |     |             ^        +-s--+-----------------------+  |
-;;  l: ball velocity         |     |             s             |                          |
-;;  a: ball acceleration     +-----|-------------+-------------+                          |
-;;  d: paddle positions            |                                                      |
-;;  s: game state                  +------------------------------------------------------+
+;;                                                +-d-----------+--------------------------+
+;;                                                v             |                          |
+;;           keyboard +-e-> sampler +---k---> paddle-postnr +-d-+   +-> gravitation +--+   |
+;;                            ^                                 |   p                  a   |
+;;                            t                                 |   |                  |   |
+;;                            |                                 |   |                  |   |
+;;                            +-------+          +-p----------+-|---+                  |   d
+;;                                    |          |  +-a-------|-|------+---------------+   |
+;;                                    |          v  v         | |      |                   v
+;;            browser +-b--> ticker +-+--t--> ball-postnr +-p-+-|------|------------p-> renderer
+;;                              ^     |             ^         | |      |                  ^  ^
+;;  Signals                     |     |       +-----|---------+ |      |                  |  |
+;;  -------                     s     |       |     l     +--d--+      |                  s  t
+;;  b: browser ticks            |     |       |   +-+-----|-------+    |                  |  |
+;;  t: game ticks               |     |       p   l   +-a-|-------|----+                  |  |
+;;  e: keyboard events          |     |       v   v   v   v  +-l--+                       |  |
+;;  k: keydowns (at rate of t)  |     +---t-> collision-detr                              |  |
+;;  p: ball position            |     |             ^        +-s--+-----------------------+  |
+;;  l: ball velocity            |     |             s             |                          |
+;;  a: ball acceleration        +-----|-------------+-------------+                          |
+;;  d: paddle positions               |                                                      |
+;;  s: game state                     +------------------------------------------------------+
 ;;
 ;;  All signals except the signal e are at the rate of the signal f. The signal e is at the rate 
 ;;  at which the keyboard issues events.
@@ -74,11 +73,11 @@
 (defn setup-gravity-controls
   "Sets up keyboard controls for changing gravity."
   []
-  (let [keydowns   (first (event-chan :keydown))
+  (let [keydowns   (first (dom-events :keydown))
         actions    { 37 #(- % *gravity-step*) 39 #(+ % *gravity-step*) }
         mass-el    (dom/by-id "mass")]
     (go-loop
-      (let [k (:keyCode (<! keydowns))]
+      (let [k (:keyCode (rd keydowns))]
         (when (contains? actions k)
           (do (swap! *gravity* #(max 0 (min 0.1 ((actions k) %))))
             (dom/set-attr! mass-el "r" (mass-radius))))))))
@@ -122,22 +121,21 @@
 (defn start-game
   "Sets up the game by creating the signals and setting up the components and starts the game."
   []
-  (let [frames     (frame-chan)          ;; frames signal
-        keydowns   (event-chan :keydown) ;; keydowns signal
-        keyups     (event-chan :keyup)   ;; keyups signal
-        pos        (chan 1)              ;; ball position signal
-        vel        (chan 1)              ;; ball velocity signal
-        acc        (chan 1)              ;; ball acceleration signal
-        pd-pos     (chan 1)              ;; paddles position signal
-        game-state (chan 1)              ;; game state signal, the state of the game and the current score
+  (let [br-ticks   (ticks)               ;; ticks signal from the browser
+        pos        (signal)              ;; ball position signal
+        vel        (signal)              ;; ball velocity signal
+        acc        (signal)              ;; ball acceleration signal
+        pd-pos     (signal)              ;; paddles position signal
+        game-state (signal)              ;; game state signal, the state of the game and the current score
         init-vel   (initial-velocity)]
-    (setup-components frames keydowns keyups game-state pos vel acc pd-pos)
+    (setup-components br-ticks game-state pos vel acc pd-pos)
 
     ;; start the game by setting the initial values of the signals
-    (put! pos *center*)
-    (put! vel init-vel)
-    (put! pd-pos [*init-paddle-pos* *init-paddle-pos*])
-    (put! game-state [:moving 0])))
+    (go
+      (wt pos *center*)
+      (wt vel init-vel)
+      (wt pd-pos [*init-paddle-pos* *init-paddle-pos*])
+      (wt game-state [:moving 0]))))
 
 (defn start-on-space []
   (ev/listen-once! :keypress #(if (= (:keyCode %) 32) (start-game) (start-on-space))))
@@ -146,28 +144,26 @@
   "Creates mult(iple)s of the signals and sets up the components by connecting them using
    the signals tapped from the mults.
    The signals and their stop functions are taken as parameters."
-  [[frames stop-frames] [keydowns stop-keydowns] [keyups stop-keyups]
-   game-state pos vel acc pd-pos]
-  (let [ticks        (chan)             ;; ticks signal
-        ticks-m      (mult ticks)       ;; mult(iple)s for all signals
-        keydowns-m   (mult keydowns)
-        keyups-m     (mult keyups)
-        pos-m        (mult pos)
-        vel-m        (mult vel)
-        acc-m        (mult acc)
-        pd-pos-m     (mult pd-pos)
-        game-state-m (mult game-state)
+  [[br-ticks stop-ticks] game-state pos vel acc pd-pos]
+  (let [ticks                    (signal)           ;; game ticks signal
+        ticks-m                  (mult ticks)       ;; mult(iple)s for all signals
+        pos-m                    (mult pos)
+        vel-m                    (mult vel)
+        acc-m                    (mult acc)
+        pd-pos-m                 (mult pd-pos)
+        game-state-m             (mult game-state)
 
-        ;; calling this will stop the frames, keydowns and keyups signals and hence stop the game
-        stop-game    #(do (stop-frames) (stop-keydowns) (stop-keyups))]
+        ;; keyboard signal for w, s, up and down keys
+        [keyboard stop-keyboard] (keyboard (tap ticks-m) {83 :s 87 :w 38 :up 40 :down})
+
+        ;; calling this will stop the ticks and the keyboard signals and hence stop the game
+        stop-game                 #(do (stop-ticks) (stop-keyboard))]
     ;; set up the components by tapping into mults
-    (ticker frames stop-game (tap game-state-m) ticks)
+    (ticker br-ticks stop-game (tap game-state-m) ticks)
 
     (gravitation (tap pos-m) acc)
     (ball-positioner (tap ticks-m) (tap pos-m) (tap vel-m) (tap acc-m) pos)
-    (paddle-positioner
-      (key-chan (tap keydowns-m) (tap keyups-m) (tap ticks-m) {83 :s 87 :w 38 :up 40 :down})
-      (tap pd-pos-m) pd-pos)
+    (paddle-positioner keyboard (tap pd-pos-m) pd-pos)
 
     (collision-detector (tap ticks-m) (tap pos-m) (tap vel-m) (tap acc-m)
       (tap pd-pos-m) (tap game-state-m) game-state vel)
@@ -176,18 +172,17 @@
 
 (defn ticker
   "Ticker component.
-   Converts `frames` signal to ticks and outputs them to the `ticks` signal
-   as long as the `game-state` signal is not :gameover. Once the `game-state` signal is
-   :gameover, stops the game by calling the `stop-game` function.
+   Reads ticks generated by the browser from the `br-ticks` signal and outputs them to the 
+   `game-ticks` signal as long as the `game-state` signal is not :gameover.
+   Once the `game-state` signal is :gameover, stops the game by calling the `stop-game` function.
    Each tick is the number of milliseconds since the last tick was generated."
-  [frames stop-game game-state ticks]
-  (let [ticks-in (tick-chan (diff-chan frames))]
-    (go (loop []
-          (let [[state _] (<! game-state)]
-            (do (>! ticks (<! ticks-in))
-              (if-not (= :gameover state)
-                (recur)
-                (stop-game))))))))
+  [br-ticks stop-game game-state game-ticks]
+  (go (loop []
+        (let [[state _] (rd game-state)]
+          (do (wt game-ticks (rd br-ticks))
+            (if-not (= :gameover state)
+              (recur)
+              (stop-game)))))))
 
 (defn gravity-acc
   "Calculates acceleration due to gravitation for the ball caused by the mass placed at the
@@ -209,7 +204,7 @@
    it to the `acc` signal."
   [pos-in acc]
   (go-loop
-    (>! acc (gravity-acc (<! pos-in)))))
+    (wt acc (gravity-acc (rd pos-in)))))
 
 (defn next-pos [[x y] [vel-x vel-y] [acc-x acc-y] tick]
   [(+ x (* vel-x tick) (* acc-x (sq tick))) (+ y (* vel-y tick) (* acc-y (sq tick)))])
@@ -221,9 +216,9 @@
    `ticks` signal) and outputs it to the `pos-out` signal."
   [ticks pos-in vel acc pos-out]
   (go-loop
-    (let [tick     (<! ticks)
-          pos-next (next-pos (<! pos-in) (<! vel) (<! acc) tick)]
-      (>! pos-out pos-next))))
+    (let [tick     (rd ticks)
+          pos-next (next-pos (rd pos-in) (rd vel) (rd acc) tick)]
+      (wt pos-out pos-next))))
 
 (defn paddle-positioner
   "Paddle Positioner component.
@@ -232,14 +227,14 @@
    and outputs it to the `pos-out` signal."
   [keys pos-in pos-out]
   (go-loop
-    (let [[lpos rpos] (<! pos-in)
-          ks          (<! keys)
+    (let [[lpos rpos] (rd pos-in)
+          ks          (rd keys)
           move        (fn [pos up down]
                         (cond
                           (contains? ks up)   (max (- pos *paddle-step*) 0)
                           (contains? ks down) (min (+ pos *paddle-step*) *max-paddle-y*)
                           :else                pos))]
-      (>! pos-out [(move lpos :w :s) (move rpos :up :down)]))))
+      (wt pos-out [(move lpos :w :s) (move rpos :up :down)]))))
 
 (defn in-y-range? [y paddle-y]
     (and (> y (- paddle-y *padding*)) (< y (+ paddle-y *paddle-size* *padding*))))
@@ -280,13 +275,13 @@
    signals respectively."
 
   (go-loop
-    (let [;; get all current values
-          tick                  (<! ticks)
-          [vel-x vel-y]         (<! vel-in)
-          [x y]                 (<! pos)
-          [gx gy]               (<! acc)
-          [lpaddle-y rpaddle-y] (<! pd-pos)
-          [_ score]             (<! game-state-in)
+    (let [;; read all current values
+          tick                  (rd ticks)
+          [vel-x vel-y]         (rd vel-in)
+          [x y]                 (rd pos)
+          [gx gy]               (rd acc)
+          [lpaddle-y rpaddle-y] (rd pd-pos)
+          [_ score]             (rd game-state-in)
 
           ;; calculate next position and detect collision
           [xn yn]               (next-pos [x y] [vel-x vel-y] [gx gy] tick)
@@ -308,8 +303,8 @@
           [vel-xn vel-yn]       (if x-collision
                                   (map perturb [vel-xn vel-yn])
                                   [vel-xn vel-yn])]
-      (>! vel-out [vel-xn vel-yn])
-      (>! game-state [state-n score-n]))))
+      (wt vel-out [vel-xn vel-yn])
+      (wt game-state [state-n score-n]))))
 
 (defn renderer
   "Renderer component.
@@ -325,10 +320,10 @@
     (dom/set-style! ball-el "fill" "orange")
     (dom/set-text! msg-el "")
     (go (loop [fps-p nil score-p nil]
-          (let [fps                   (int (/ 1000 (<! ticks)))
-                [x y]                 (<! pos)
-                [lpaddle-y rpaddle-y] (<! pd-pos)
-                [state score]         (<! game-state)]
+          (let [fps                   (int (/ 1000 (rd ticks)))
+                [x y]                 (rd pos)
+                [lpaddle-y rpaddle-y] (rd pd-pos)
+                [state score]         (rd game-state)]
             (doto ball-el
               (dom/set-attr! "cx" x)
               (dom/set-attr! "cy" y))

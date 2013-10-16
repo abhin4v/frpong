@@ -1,4 +1,4 @@
-(ns frpong.helpers
+(ns frpong.signals
   (:require [cljs.core.async :as async
              :refer [<! >! chan put! close! sliding-buffer dropping-buffer timeout]]
             [domina :as dom :refer [log]]
@@ -8,6 +8,8 @@
 
 (defn now []
   (.valueOf (js/Date.)))
+
+(defn signal [] (chan 1))
 
 (defn put-all! [cs x]
   (doseq [c cs]
@@ -23,7 +25,7 @@
             (close! c))))
     c))
 
-(defn map-chan [f source]
+(defn smap [f source]
   (let [c (chan)]
     (go (loop []
           (if-let [v (<! source)]
@@ -31,7 +33,7 @@
             (close! c))))
     c))
 
-(defn filter-chan [f source]
+(defn sfilter [f source]
   (let [c (chan)]
     (go (loop []
           (if-let [v (<! source)]
@@ -39,9 +41,9 @@
             (close! c))))
     c))
 
-(defn interval-chan
+(defn interval-signal
   ([msecs]
-    (interval-chan msecs :leading))
+    (interval-signal msecs :leading))
   ([msecs type]
     (let [c (chan (dropping-buffer 1))]
       (condp = type
@@ -117,16 +119,36 @@
         (>! c x)))
     c))
 
-(defn distinct-chan [source]
+(defn scounter [source]
   (let [c (chan)]
     (go
-      (loop [last ::init]
-        (let [v (<! source)]
-          (when-not (= last v) (>! c v))
-          (recur v))))
+      (loop [count 0]
+        (if-let [v (<! source)]
+          (do (>! c count) (recur (inc count)))
+          (close! c))))
     c))
 
-(defn event-chan
+(defn sdiff [source]
+  (let [c (chan)]
+    (go
+      (let [start (<! source)]
+        (loop [start start]
+          (if-let [v (<! source)]
+            (do (>! c (- v start)) (recur v))
+            (close! c)))))
+    c))
+
+(defn sampler [source n]
+  (let [c (chan)]
+    (go
+      (loop [count 0]
+        (if-let [v (<! source)]
+          (do (when (= count 0) (>! c v))
+            (recur (rem (inc count) n)))
+          (close! c))))
+    c))
+
+(defn dom-events
   ([event-type]
     (let [c      (chan)
           [lkey] (ev/listen! event-type #(put! c %))]
@@ -136,10 +158,12 @@
           [lkey] (ev/listen! node event-type #(put! c %))]
       [c #(do (ev/unlisten-by-key! lkey) (close! c))])))
 
-(defn key-chan [keydowns keyups sampler keycodes]
-  (let [c   (chan)
-        ops { keydowns conj
-              keyups   disj }]
+(defn keyboard [sampler keycodes]
+  (let [[keydowns kd-stop-fn] (dom-events :keydown) ;; keydowns signal
+        [keyups   ku-stop-fn] (dom-events :keyup)   ;; keyups signal
+        c                     (chan)
+        ops                   { keydowns conj
+                                keyups   disj }]
     (go (loop [keys #{}]
       (let [[v ch] (alts! [keydowns keyups sampler] :priority true)]
         (if-not (nil? v)
@@ -150,9 +174,9 @@
                 (recur keys)))
             (do (>! c keys) (recur keys)))
           (close! c)))))
-    c))
+    [c #(do (kd-stop-fn) (ku-stop-fn))]))
 
-(defn frame-chan []
+(defn frames []
   (let [fc (chan (sliding-buffer 1000))
         rc (chan (sliding-buffer 10))
         step (fn step [ts] 
@@ -168,44 +192,17 @@
     (.requestAnimationFrame js/window step)
     [fc stop-fn]))
 
-(defn tick-chan [frames]
-  (let [c (chan)]
+(defn ticks []
+  (let [c                (chan)
+        [frames stop-fn] (frames)
+        frames-diff      (sdiff frames)]
     (go
-      (loop [prev (<! frames)]
-        (if-let [t (<! frames)]
+      (loop [prev (<! frames-diff)]
+        (if-let [t (<! frames-diff)]
           (do (when (< t (* 10 prev)) (>! c t))
             (recur t))
           (close! c))))
-    c))
-
-(defn counting-chan [source]
-  (let [c (chan)]
-    (go
-      (loop [count 0]
-        (if-let [v (<! source)]
-          (do (>! c count) (recur (inc count)))
-          (close! c))))
-    c))
-
-(defn diff-chan [source]
-  (let [c (chan)]
-    (go
-      (let [start (<! source)]
-        (loop [start start]
-          (if-let [v (<! source)]
-            (do (>! c (- v start)) (recur v))
-            (close! c)))))
-    c))
-
-(defn dropping-chan [source n]
-  (let [c (chan)]
-    (go
-      (loop [count 0]
-        (if-let [v (<! source)]
-          (do (when (= count 0) (>! c v))
-            (recur (rem (inc count) n)))
-          (close! c))))
-    c))
+    [c stop-fn]))
 
 (defprotocol Mux
   (muxch* [_]))
