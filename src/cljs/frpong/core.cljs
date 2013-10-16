@@ -5,7 +5,7 @@
   (:require-macros [frpong.core :refer (go go-loop rd wt)]))
 
 ;; * `signal` creates a new signal
-;; * `keyboard`, `ticks` and `dom-events` create signals for keydown events, browser animation ticks and 
+;; * `keyboard`, `ticks` and `dom-events` create signals for keydown events, browser animation ticks and
 ;; JS DOM events repectively
 ;; * `mult` creates a mult(iple) of a signal which can then be tapped using `tap` to create a copy of the
 ;; original signal
@@ -38,8 +38,8 @@
 ;;  d: paddle positions               |                                                      |
 ;;  s: game state                     +------------------------------------------------------+
 ;;
-;;  All signals except the signal e are at the rate of the signal b. The signal e is at the rate 
-;;  at which the keyboard issues events. The signal b is at the rate at which the browser supplies 
+;;  All signals except the signal e are at the rate of the signal b. The signal e is at the rate
+;;  at which the keyboard issues events. The signal b is at the rate at which the browser supplies
 ;;  animation frames.
 
 (defn abs [x] (.abs js/Math x))
@@ -54,77 +54,77 @@
 (defn sin [x] (.sin js/Math x))
 
 ;; Global settings
-(def *width*            (- (.-scrollWidth (.-body js/document)) 20))
-(def *height*           (- (.-scrollHeight (.-body js/document)) 130))
-(def *center*           [(/ *width* 2 ) (/ *height* 2)])
-(def *padding*          5)
-(def *paddle-size*      100)
+(def width            (- (.-scrollWidth (.-body js/document)) 20))
+(def height           (- (.-scrollHeight (.-body js/document)) 130))
+(def center           [(/ width 2 ) (/ height 2)])
+(def padding          5)
+(def paddle-size      100)
 
-(def *ball-radius*      8)
-(def *ball-speed*       0.6)
-(def *init-vel-deg-lim* [35 55])
-(def *perturb-factor*   0.05)
+(def ball-radius      8)
+(def ball-speed       0.6)
+(def init-vel-deg-lim [35 55])
+(def perturb-factor   0.05)
 
-(def *init-mass-radius* 0)
+(def init-mass-radius 0)
 
-(def *paddle-width*     10)
-(def *paddle-step*      8)
-(def *max-paddle-y*     (- *height* *paddle-size*))
-(def *ef-paddle-width*  (+ *paddle-width* *padding*))
-(def *init-paddle-pos*  (/ (- *height* *paddle-size*) 2))
+(def paddle-width     10)
+(def paddle-step      8)
+(def max-paddle-y     (- height paddle-size))
+(def ef-paddle-width  (+ paddle-width padding))
+(def init-paddle-pos  (/ (- height paddle-size) 2))
 
-(def *gravity*          (atom 0.005))
-(def *gravity-step*     0.005)
+(def gravity          (atom 0.005))
+(def gravity-step     0.005)
 
 (defn mass-radius []
-  (+ *init-mass-radius* (* (deref *gravity*) 1000)))
+  (+ init-mass-radius (* (deref gravity) 1000)))
 
 (defn setup-gravity-controls
   "Sets up keyboard controls for changing gravity."
   []
   (let [keydowns   (first (dom-events :keydown))
-        actions    { 37 #(- % *gravity-step*) 39 #(+ % *gravity-step*) }
+        actions    { 37 #(- % gravity-step) 39 #(+ % gravity-step) }
         mass-el    (dom/by-id "mass")]
     (go-loop
       (let [k (:keyCode (rd keydowns))]
         (when (contains? actions k)
-          (do (swap! *gravity* #(max 0 (min 0.1 ((actions k) %))))
+          (do (swap! gravity #(max 0 (min 0.1 ((actions k) %))))
             (dom/set-attr! mass-el "r" (mass-radius))))))))
 
 (defn layout-game
   "Lays out the game screen."
   []
   (doto (dom/by-id "canvas")
-      (dom/set-style! "width" (str *width* "px"))
-      (dom/set-style! "height" (str *height* "px")))
+      (dom/set-style! "width" (str width "px"))
+      (dom/set-style! "height" (str height "px")))
   (doto (dom/by-id "ball")
-    (dom/set-attr! "r" *ball-radius*)
-    (dom/set-attr! "cx" (first *center*))
-    (dom/set-attr! "cy" (second *center*)))
+    (dom/set-attr! "r" ball-radius)
+    (dom/set-attr! "cx" (first center))
+    (dom/set-attr! "cy" (second center)))
   (doto (dom/by-id "mass")
     (dom/set-attr! "r" (mass-radius))
-    (dom/set-attr! "cx" (first *center*))
-    (dom/set-attr! "cy" (second *center*)))
+    (dom/set-attr! "cx" (first center))
+    (dom/set-attr! "cy" (second center)))
   (doto (dom/by-id "score")
-    (dom/set-attr! "x" (first *center*))
-    (dom/set-attr! "y" (- *height* 50)))
+    (dom/set-attr! "x" (first center))
+    (dom/set-attr! "y" (- height 50)))
   (doseq [id ["lpaddle" "rpaddle"]]
     (doto (dom/by-id id)
-      (dom/set-attr! "width" *paddle-width*)
-      (dom/set-attr! "height" *paddle-size*)
-      (dom/set-attr! "y" (/ (- *height* *paddle-size*) 2))))
+      (dom/set-attr! "width" paddle-width)
+      (dom/set-attr! "height" paddle-size)
+      (dom/set-attr! "y" (/ (- height paddle-size) 2))))
   (dom/set-attr! (dom/by-id "lpaddle") "x" 0)
-  (dom/set-attr! (dom/by-id "rpaddle") "x" (- *width* *paddle-width*)))
+  (dom/set-attr! (dom/by-id "rpaddle") "x" (- width paddle-width)))
 
 (defn initial-velocity
   "Calculates a random initial ball velocity, randomly in any four quadrants, between
-   the limits of degrees specified by *init-vel-deg-lim*."
+   the limits of degrees specified by init-vel-deg-lim."
   []
-  (let [[l h] *init-vel-deg-lim*
+  (let [[l h] init-vel-deg-lim
         sgn   #(if (< % 0.5) -1 1)
         deg   (+ l (* (- h l) (rand)))
         rad   (deg->rad deg)]
-    (map #(* *ball-speed* %)
+    (map #(* ball-speed %)
       [(* (sgn (rand)) (sin rad)) (* (sgn (rand)) (cos rad))])))
 
 (defn start-game
@@ -141,9 +141,9 @@
 
     ;; start the game by setting the initial values of the signals
     (go
-      (wt pos *center*)
+      (wt pos center)
       (wt vel init-vel)
-      (wt pd-pos [*init-paddle-pos* *init-paddle-pos*])
+      (wt pd-pos [init-paddle-pos init-paddle-pos])
       (wt game-state [:moving 0]))))
 
 (defn start-on-space []
@@ -181,7 +181,7 @@
 
 (defn ticker
   "Ticker component.
-   Reads ticks generated by the browser from the `br-ticks` signal and outputs them to the 
+   Reads ticks generated by the browser from the `br-ticks` signal and outputs them to the
    `game-ticks` signal as long as the `game-state` signal is not :gameover.
    Once the `game-state` signal is :gameover, stops the game by calling the `stop-game` function.
    Each tick is the number of milliseconds since the last tick was generated."
@@ -197,8 +197,8 @@
   "Calculates acceleration due to gravitation for the ball caused by the mass placed at the
    center of the board."
   [[x y]]
-  (let [grav     (deref *gravity*)
-        [cx cy]  *center*
+  (let [grav     (deref gravity)
+        [cx cy]  center
         x-dist   (- cx x)
         y-dist   (- cy y)
         distance (sqrt (+ (sq x-dist) (sq y-dist)))
@@ -240,27 +240,27 @@
           ks          (rd keys)
           move        (fn [pos up down]
                         (cond
-                          (contains? ks up)   (max (- pos *paddle-step*) 0)
-                          (contains? ks down) (min (+ pos *paddle-step*) *max-paddle-y*)
+                          (contains? ks up)   (max (- pos paddle-step) 0)
+                          (contains? ks down) (min (+ pos paddle-step) max-paddle-y)
                           :else                pos))]
       (wt pos-out [(move lpos :w :s) (move rpos :up :down)]))))
 
 (defn in-y-range? [y paddle-y]
-    (and (> y (- paddle-y *padding*)) (< y (+ paddle-y *paddle-size* *padding*))))
+    (and (> y (- paddle-y padding)) (< y (+ paddle-y paddle-size padding))))
 
 (defn detect-x-collision [x y lpaddle-y rpaddle-y]
   (cond
-    (< x *ef-paddle-width*)
+    (< x ef-paddle-width)
       (if (in-y-range? y lpaddle-y) :collision-left  :gameover)
-    (> x (- *width* *ef-paddle-width*))
+    (> x (- width ef-paddle-width))
       (if (in-y-range? y rpaddle-y) :collision-right :gameover)
     :else :moving))
 
 (defn detect-y-collision [y]
   (cond
-    (< y *padding*)              :collision-left
-    (> y (- *height* *padding*)) :collision-right
-    :else                        :moving))
+    (< y padding)            :collision-left
+    (> y (- height padding)) :collision-right
+    :else                    :moving))
 
 (defn collision? [state]
   (or (= state :collision-left) (= state :collision-right)))
@@ -272,7 +272,7 @@
     :moving          vel
     :gameover        0))
 
-(defn perturb [v] (* v (+ 1 (* (rand) *perturb-factor*))))
+(defn perturb [v] (* v (+ 1 (* (rand) perturb-factor))))
 
 (defn collision-detector [ticks pos vel-in acc pd-pos game-state-in game-state vel-out]
   "Collision Detector component.
@@ -300,8 +300,8 @@
           y-collision           (collision? y-state)
 
           ;; calculate next velocity and game state
-          vel-xn                (min *ball-speed* (+ (adjust-vel x-state vel-x) (* gx tick)))
-          vel-yn                (min *ball-speed* (+ (adjust-vel y-state vel-y) (* gy tick)))
+          vel-xn                (min ball-speed (+ (adjust-vel x-state vel-x) (* gx tick)))
+          vel-yn                (min ball-speed (+ (adjust-vel y-state vel-y) (* gy tick)))
           state-n               (cond
                                   (= x-state :gameover)        :gameover
                                   (or x-collision y-collision) :collision
