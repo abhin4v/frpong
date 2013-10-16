@@ -4,14 +4,14 @@
             [domina.events :as ev])
   (:require-macros [frpong.core :refer (go go-loop rd wt)]))
 
-;; > `signal` creates a new signal
-;; > `keyboard`, `ticks` and `dom-events` create signals for keydown events, browser animation ticks and 
+;; * `signal` creates a new signal
+;; * `keyboard`, `ticks` and `dom-events` create signals for keydown events, browser animation ticks and 
 ;; JS DOM events repectively
-;; > `mult` creates a mult(iple) of a signal which can then be tapped using `tap` to create a copy of the
+;; * `mult` creates a mult(iple) of a signal which can then be tapped using `tap` to create a copy of the
 ;; original signal
-;; > `rd` reads the current value of a signal
-;; > `wt` sets the current value of a signal to the provided value
-;; > `go` and `go-loop` start and run a component
+;; * `rd` reads the current value of a signal
+;; * `wt` sets the current value of a signal to the provided value
+;; * `go` and `go-loop` start and run a component
 
 ;;                                       Signal Diagram
 ;;
