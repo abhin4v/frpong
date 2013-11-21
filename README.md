@@ -16,7 +16,7 @@ using core.async channels) to form a network - like an electronic circuit - to b
 The signals have values which change over time. [`window.requestAnimationFrame`][raf] is used as a 
 clock to generate the time ticks to run the game.
 
-The very [lose coupling][coupling] (data coupling) caused by the modular design allows one to add 
+The very [loose coupling][coupling] (data coupling) caused by the modular design allows one to add 
 new components in the network without changing other parts of it. In fact, this was first developed 
 as a usual Pong game and gravitation was added only as an afterthought, with very minimal changes
 to the existing code.
@@ -73,7 +73,7 @@ Components
  - *gravitation*: calculates the acceleration of the ball due to gravitation
  - *renderer*: renders the game on screen
 
-This project was written as an experiment to play with the core.async library and can serve as
+This project has been written as an experiment to play with the core.async library and can serve as
 a medium sized example project for the same. The main source can be found [here][src].
 
 [pong]: https://en.wikipedia.org/wiki/Pong
