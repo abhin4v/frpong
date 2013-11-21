@@ -72,8 +72,8 @@ Components
  - *gravitation*: calculates the acceleration of the ball due to gravitation
  - *renderer*: renders the game on screen
 
- This project was written as an experiment to play with the core.async library and can serve as
- a medium sized example project for the same. The main source can be found [here][src].
+This project was written as an experiment to play with the core.async library and can serve as
+a medium sized example project for the same. The main source can be found [here][src].
 
 [pong]: https://en.wikipedia.org/wiki/Pong
 [cljs]: https://github.com/clojure/clojurescript
