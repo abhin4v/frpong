@@ -1,21 +1,22 @@
 # Gravity Pong
 
 Gravity Pong is the famous [Pong][pong] game with a twist, written in [ClojureScript][cljs] using the 
-[core.async][coreasync] library.
+[core.async][coreasync] library. It can be played [here][demo] (only works on Google Chrome for now).
 
 Along with the usual Pong ball and the paddles on both sides of the screen, there is also a mass at 
 the center of the screen which exerts a gravitational force on the ball causing it to change its path
 from a usual straight line to a curve. And the user can control the gravitational force using the 
-keyboard to shape the ball's path as they want! It can be played [here][demo] (only works on 
-Google Chrome for now).
+keyboard to shape the ball's path as they want.
 
-## Programming Details
+## Details for Programmers
 It is written in the [Flow-based Programming][fbprog] paradigm where calculations of ball's position, 
 velocity etc are done by separate modular components running in their own threads of computation 
 (in this case, core.async go processes). These components are connected using signals (implemented 
 using core.async channels) to form a network - like an electronic circuit - to build the complete game.
+The signals have values which change over time. [`window.requestAnimationFrame`][raf] is used as a 
+clock to generate the time ticks to run the game.
 
-The very [lose coupling][coupling] (data coupling) caused by this modular design allows one to add 
+The very [lose coupling][coupling] (data coupling) caused by the modular design allows one to add 
 new components in the network without changing other parts of it. In fact, this was first developed 
 as a usual Pong game and gravitation was added only as an afterthought, with very minimal changes
 to the existing code.
@@ -62,7 +63,7 @@ Signals
 Components
 
  - *keyboard*: keyboard for user input
- - *browser*: browser
+ - *browser*: browser as the primary source of ticks
  - *ticker*: generates game ticks from browser ticks
  - *sampler*: samples input signal based on a sampling signal
  - *paddle-postnr*: paddle positioner, calculates the position of paddles
@@ -82,3 +83,4 @@ a medium sized example project for the same. The main source can be found [here]
 [fbprog]: https://en.wikipedia.org/wiki/Flow-based_programming
 [coupling]: https://en.wikipedia.org/wiki/Coupling_(computer_programming)
 [src]: https://github.com/abhin4v/frpong/blob/master/src/cljs/frpong/core.cljs
+[raf]: https://developer.mozilla.org/en-US/docs/Web/API/window.requestAnimationFrame
